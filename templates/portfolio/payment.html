@@ -1,1 +1,78 @@
-{% extends 'base.html' %}{% block content %}<section class="form-card"><p class="eyebrow">وضعیت پرداخت</p><h1>{{ payment.get_status_display }}</h1><p>{{ payment.plan_name }}</p><p>{{ payment.amount_rial }} ریال</p>{% if payment.sandbox %}<p class="notice">این تراکنش آزمایشی است و پرداخت واقعی نیست.</p>{% endif %}{% if payment.status == 'paid' %}<p>اشتراک برای حساب شما ثبت شد.</p><p class="muted">کد پیگیری: {{ payment.ref_id }}</p><a class="button" href="{% url 'dashboard' %}">رفتن به صفحه من</a>{% else %}<p class="muted">اشتراکی برای این پرداخت فعال نشده است. اگر پرداخت را انجام داده‌ای، تأیید را دوباره بررسی کن. در صورت ادامه مشکل، شماره سفارش را برای پشتیبانی نگه دار.</p>{% if payment.authority %}<form method="post" action="{% url 'payment-retry' payment.pk %}">{% csrf_token %}<button class="button">بررسی دوباره پرداخت</button></form>{% endif %}{% endif %}<p class="muted break-word">شماره سفارش: {{ payment.pk }}</p></section>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}وضعیت تراکنش بانکی | درباره‌ی من{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+    <div class="form-art-card art-panel">
+        <div class="card-badge-top">
+            <span class="badge-dot"></span>
+            <span>نتیجه عملیات پرداخت</span>
+        </div>
+
+        <h1 class="card-title">رسید وضعیت پرداخت</h1>
+
+        <div class="payment-status-header status-{{ payment.status }}">
+            <span class="status-symbol">
+                {% if payment.status == 'paid' %}✓{% else %}✗{% endif %}
+            </span>
+            <h2 class="status-title">{{ payment.get_status_display }}</h2>
+        </div>
+
+        <div class="checkout-summary-box">
+            <div class="summary-line">
+                <span class="lbl">پلن خریداری‌شده:</span>
+                <span class="val">{{ payment.plan_name }}</span>
+            </div>
+            <div class="summary-line">
+                <span class="lbl">مبلغ پرداختی:</span>
+                <span class="val">{{ payment.amount_rial }} ریال</span>
+            </div>
+            <div class="summary-line">
+                <span class="lbl">شماره سفارش در سامانه:</span>
+                <span class="val code-font">{{ payment.pk }}</span>
+            </div>
+            {% if payment.ref_id %}
+                <div class="summary-line">
+                    <span class="lbl">کد رهگیری بانکی (RefID):</span>
+                    <span class="val code-font bold-val">{{ payment.ref_id }}</span>
+                </div>
+            {% endif %}
+        </div>
+
+        {% if payment.sandbox %}
+            <div class="notice notice-info">
+                <span class="notice-icon">ℹ</span>
+                <p>این تراکنش در محیط آزمایشی صادر شده و صرفاً جهت صحت‌سنجی گردش کار ثبت گردیده است.</p>
+            </div>
+        {% endif %}
+
+        {% if payment.status == 'paid' %}
+            <div class="notice notice-success">
+                <span class="notice-icon">✓</span>
+                <div>
+                    <strong>اشتراک با موفقیت در حساب کاربری شما فعال شد.</strong>
+                    <p>دسترسی‌ها فوراً اعمال شده و تاریخ پایان اعتبار از امروز محاسبه می‌گردد.</p>
+                </div>
+            </div>
+            <a class="btn btn-primary btn-block btn-lg" href="{% url 'dashboard' %}">بازگشت به میز کار من ←</a>
+        {% else %}
+            <div class="notice notice-danger">
+                <span class="notice-icon">⚠</span>
+                <div>
+                    <strong>پرداخت تکمیل نگردید یا توسط کاربر لغو شد.</strong>
+                    <p>چنانچه مبلغی از حساب شما کسر گردیده است، طبق مقررات بانکی شبکه شاپرک ظرف مدت حداکثر ۷۲ ساعت به کارت شما عودت خواهد شد.</p>
+                </div>
+            </div>
+
+            {% if payment.authority %}
+                <form method="post" action="{% url 'payment-retry' payment.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-primary btn-block" type="submit">استعلام مجدد از بانک</button>
+                </form>
+            {% endif %}
+
+            <a class="btn btn-outline btn-block mt-3" href="{% url 'plans' %}">تلاش مجدد در انتخاب پلن</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

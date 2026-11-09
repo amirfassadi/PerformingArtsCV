@@ -1,10 +1,127 @@
 {% extends 'base.html' %}
+{% block title %}درباره‌ی من | رزومه و نمونه‌کار اهالی سینما و تئاتر{% endblock %}
+
 {% block content %}
-<section class="hero"><div class="hero-copy"><p class="eyebrow">برای اهالی سینما و تئاتر</p>
-<h1>کار تو،<br>روایت تو،<br><em>صحنه بعدی تو.</em></h1>
-<p class="lead">رزومه و نمونه‌کارهایت را یک‌جا جمع کن. فرصتی بساز تا کسانی که به دنبال استعداد تو هستند، کارت را ببینند.</p>
-<div class="actions">{% if user.is_authenticated %}<a class="button" href="{% url 'dashboard' %}">رفتن به صفحه من ←</a>{% else %}<a class="button" href="{% url 'signup' %}">رزومه‌ات را بساز ←</a><a class="button secondary" href="{% url 'login' %}">ورود به حساب</a>{% endif %}</div>
-<p class="muted">ساخت صفحه رایگان است؛ با {{ free_mb }} مگابایت فضای اولیه.</p></div>
-<div class="stage-art" aria-hidden="true"><div class="stage-orbit"></div><div class="stage-card"><span class="tag">پروفایل حرفه‌ای</span><div class="portrait-shape">◯</div><div class="art-line long"></div><div class="art-line"></div><div class="art-thumbnails"><i></i><i></i><i></i></div><span class="card-caption">هر تجربه، بخشی از داستان توست.</span></div><span class="stage-label">THE NEXT ACT IS YOURS</span></div></section>
-<section class="intro-grid"><article><span class="step">۰۱ / معرفی</span><h2>فراتر از یک نام</h2><p>تخصص، مهارت‌ها و تجربه‌های سینمایی و تئاتری‌ات را در صفحه خودت ثبت کن.</p></article><article><span class="step">۰۲ / نمونه‌کار</span><h2>بگذار کارت حرف بزند</h2><p>تصویر، ویدئو و لینک آثارت را کنار رزومه نگه دار؛ برای فضای بیشتر پلن جدا بگیر.</p></article><article><span class="step">۰۳ / کشف</span><h2>انتخاب با شناخت</h2><p>دنبال بازیگر می‌گردی؟ با اشتراک مشاهده، رزومه‌های منتشرشده و نمونه‌کارها را بررسی کن.</p></article></section>
+<section class="hero-stage">
+    <div class="hero-content">
+        <div class="badge-stage">
+            <span class="badge-dot"></span>
+            <span>ویژه بازیگران، کارگردانان و عوامل سینما و تئاتر</span>
+        </div>
+
+        <h1 class="hero-headline">
+            روایت تو بر پرده،<br>
+            حضور تو در صحنه،<br>
+            <em class="hero-accent">نقش بعدیِ تو.</em>
+        </h1>
+
+        <p class="hero-lead">
+            رزومه، سوابق تحصیلی، همکاران پروژه‌ها و نمونه‌کارهای تصویری و ویدئویی‌ات را در فضایی آراسته و معتبر گردهم بیاور.
+            جایی که تهیه‌کنندگان و کارگردانان استعداد واقعی را در پرتو مناسب کشف می‌کنند.
+        </p>
+
+        <div class="hero-cta-group">
+            {% if user.is_authenticated %}
+                <a class="btn btn-primary btn-lg" href="{% url 'dashboard' %}">
+                    <span>مدیریت صفحه و رزومه من</span>
+                    <span class="btn-arrow" aria-hidden="true">←</span>
+                </a>
+                <a class="btn btn-outline btn-lg" href="{% url 'directory' %}">کشف هنرمندان</a>
+            {% else %}
+                <a class="btn btn-primary btn-lg" href="{% url 'signup' %}">
+                    <span>شروع ساخت رزومه رایگان</span>
+                    <span class="btn-arrow" aria-hidden="true">←</span>
+                </a>
+                <a class="btn btn-outline btn-lg" href="{% url 'login' %}">ورود به حساب کاربری</a>
+            {% endif %}
+        </div>
+
+        <div class="hero-perks">
+            <div class="perk-item">
+                <span class="perk-check">✓</span>
+                <span>ساخت و مدیریت صفحه شخصی رایگان است</span>
+            </div>
+            <div class="perk-item">
+                <span class="perk-check">✓</span>
+                <span>{{ free_mb }} مگابایت فضای اولیه رایگان</span>
+            </div>
+            <div class="perk-item">
+                <span class="perk-check">✓</span>
+                <span>حفظ کامل حریم خصوصی فایل‌ها</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="hero-visual" aria-hidden="true">
+        <div class="stage-frame">
+            <div class="stage-header-bar">
+                <span class="frame-tag">PORTFOLIO EDITION</span>
+                <span class="frame-code">ACT-01 // SCENE-01</span>
+            </div>
+
+            <div class="stage-avatar-box">
+                <div class="stage-spotlight-effect"></div>
+                <div class="stage-silhouette">🎭</div>
+            </div>
+
+            <div class="stage-info-lines">
+                <div class="line line-title"></div>
+                <div class="line line-sub"></div>
+                <div class="tags-row">
+                    <span class="mini-tag">بازیگری تئاتر</span>
+                    <span class="mini-tag">سینما</span>
+                    <span class="mini-tag">فیلم کوتاه</span>
+                </div>
+            </div>
+
+            <div class="film-strip-preview">
+                <div class="film-cell cell-1"></div>
+                <div class="film-cell cell-2"></div>
+                <div class="film-cell cell-3"></div>
+            </div>
+
+            <div class="stage-footer-note">
+                «هر سابقه، امضای هنری توست.»
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="narrative-grid">
+    <article class="narrative-card">
+        <div class="card-number">۰۱</div>
+        <h2 class="card-title">هویت و سوابق پیوسته</h2>
+        <p class="card-text">
+            نام هنری، بیوگرافی، تحصیلات دانشگاهی، دوره‌های آموزشی و مهارت‌های کلامی و بدنی‌ات را همراه با راه‌های ارتباط حرفه‌ای ثبت کن.
+        </p>
+    </article>
+
+    <article class="narrative-card">
+        <div class="card-number">۰۲</div>
+        <h2 class="card-title">آثار و همکاران پروژه‌ها</h2>
+        <p class="card-text">
+            نقش، نام کاراکتر، تاریخ پروژه و افرادی که با آن‌ها همکاری کرده‌ای (کارگردان، تهیه‌کننده، طراح صحنه) را به‌روشنی پیوند بده.
+        </p>
+    </article>
+
+    <article class="narrative-card">
+        <div class="card-number">۰۳</div>
+        <h2 class="card-title">آرشیو خصوصی نمونه‌کارها</h2>
+        <p class="card-text">
+            ویدئوهای شو ریل، اتودها و عکس‌های صحنه با امنیت در فضای تحت کنترل نگهداری می‌شوند و فقط برای مشترکان معتبر قابل مشاهده‌اند.
+        </p>
+    </article>
+</section>
+
+<section class="banner-stage">
+    <div class="banner-inner">
+        <div class="banner-text">
+            <h3>به دنبال انتخاب بازیگر یا همکار برای پروژه بعدی هستید؟</h3>
+            <p>با تهیه اشتراک مشاهده، به فهرست جامع رزومه‌های منتشرشده سینما و تئاتر با اطلاعات موثق و نمونه‌کارها دسترسی داشته باشید.</p>
+        </div>
+        <div class="banner-actions">
+            <a class="btn btn-primary" href="{% url 'plans' %}">مشاهده پلن‌های اشتراک ←</a>
+        </div>
+    </div>
+</section>
 {% endblock %}

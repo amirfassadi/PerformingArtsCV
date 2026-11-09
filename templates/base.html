@@ -1,19 +1,81 @@
-{% load static %}<!doctype html>
+{% load static %}
+<!doctype html>
 <html lang="fa" dir="rtl">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}صحنه‌نما | رزومه اهالی صحنه و سینما{% endblock %}</title>
-<link rel="stylesheet" href="{% static 'app.css' %}"></head>
-<body>
-<header class="site-header"><a class="brand" href="{% url 'home' %}"><span class="brand-icon" aria-hidden="true">◧</span> صحنه‌نما<span class="beta">نسخه اولیه</span></a>
-<nav aria-label="منوی اصلی">
-{% if user.is_authenticated %}
-<a href="{% url 'dashboard' %}">صفحه من</a><a href="{% url 'directory' %}">کشف هنرمندان</a><a href="{% url 'plans' %}">اشتراک و فضا</a>
-{% if user.is_staff %}<a href="{% url 'admin:index' %}">مدیریت</a>{% endif %}
-<form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}<button class="text-button">خروج</button></form>
-{% else %}<a href="{% url 'login' %}">ورود</a><a class="button small" href="{% url 'signup' %}">ساخت رزومه</a>{% endif %}
-</nav></header>
-<main class="container">
-{% for message in messages %}<div class="notice {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}
-{% block content %}{% endblock %}
-</main><footer class="site-footer"><span>صحنه‌نما</span><span>جایی برای دیده شدن تجربه و استعداد.</span><span>سینما · تئاتر · هنرهای نمایشی</span></footer>
-</body></html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}درباره‌ی من | رزومه و نمونه‌کار اهالی سینما و تئاتر{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'app.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="site-body">
+    <div class="film-grain-overlay" aria-hidden="true"></div>
+
+    <header class="site-header">
+        <div class="header-inner">
+            <a class="brand" href="{% url 'home' %}">
+                <span class="brand-clapper" aria-hidden="true">🎬</span>
+                <span class="brand-text">
+                    <span class="brand-title">درباره‌ی من</span>
+                    <span class="brand-subtitle">رزومه و نمونه‌کار اهالی سینما و تئاتر</span>
+                </span>
+            </a>
+
+            <nav class="main-nav" aria-label="منوی اصلی">
+                {% if user.is_authenticated %}
+                    <a class="nav-link" href="{% url 'dashboard' %}">صفحه من</a>
+                    <a class="nav-link" href="{% url 'directory' %}">کشف هنرمندان</a>
+                    <a class="nav-link" href="{% url 'plans' %}">پلن‌ها و فضا</a>
+                    <a class="nav-link" href="/account/settings/">تنظیمات حساب</a>
+                    {% if user.is_staff %}
+                        <a class="nav-link staff-link" href="{% url 'admin:index' %}">مدیریت</a>
+                    {% endif %}
+                    <form method="post" action="{% url 'logout' %}" class="inline-form">
+                        {% csrf_token %}
+                        <button class="nav-btn-logout" type="submit">خروج</button>
+                    </form>
+                {% else %}
+                    <a class="nav-link" href="{% url 'directory' %}">کشف هنرمندان</a>
+                    <a class="nav-link" href="{% url 'plans' %}">پلن‌های اشتراک</a>
+                    <a class="nav-link" href="{% url 'login' %}">ورود</a>
+                    <a class="btn btn-primary btn-sm" href="{% url 'signup' %}">ساخت رزومه رایگان</a>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        {% if messages %}
+            <div class="notices-wrapper">
+                {% for message in messages %}
+                    <div class="notice notice-{{ message.tags|default:'info' }}" role="status">
+                        <span class="notice-icon">◉</span>
+                        <span class="notice-text">{{ message }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <span class="footer-title">«درباره‌ی من»</span>
+                <span class="footer-desc">سکوی تخصصی نمایش استعداد، رزومه و آرشیو آثار فعالان سینما، تئاتر و هنرهای نمایشی ایران</span>
+            </div>
+            <div class="footer-meta">
+                <span class="footer-quote">«هر تجربه، پرده‌ای از روایت حرفه‌ای توست.»</span>
+                <span class="footer-links">
+                    <span>سینما · تئاتر · فیلم کوتاه · صدا و صحنه</span>
+                </span>
+            </div>
+        </div>
+    </footer>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

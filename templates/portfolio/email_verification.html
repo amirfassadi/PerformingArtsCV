@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}نتیجه تأیید نشانی ایمیل | درباره‌ی من{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+    <div class="form-art-card art-panel">
+        <div class="card-badge-top">
+            <span class="badge-dot"></span>
+            <span>تأیید نشانی الکترونیکی</span>
+        </div>
+
+        {% if verification_status == 'valid' %}
+            <div class="verification-hero success">
+                <span class="status-symbol">✓</span>
+                <h1 class="card-title">ایمیل شما با موفقیت تأیید شد</h1>
+                <p class="card-subtitle">نشانی الکترونیکی <strong dir="ltr">{{ email }}</strong> به عنوان روش معتبر مکاتبات و بازیابی حساب ثبت گردید.</p>
+                <a class="btn btn-primary btn-block btn-lg" href="{% url 'dashboard' %}">رفتن به میز کار من ←</a>
+            </div>
+        {% elif verification_status == 'expired' %}
+            <div class="verification-hero warning">
+                <span class="status-symbol">⏱</span>
+                <h1 class="card-title">لینک تأیید منقضی شده است</h1>
+                <p class="card-subtitle">مهلت زمانی استفاده از این لینک (۴۸ ساعت) به پایان رسیده است.</p>
+                <a class="btn btn-primary btn-block" href="/account/settings/">ارسال مجدد لینک تأیید در تنظیمات حساب</a>
+            </div>
+        {% else %}
+            <div class="verification-hero danger">
+                <span class="status-symbol">✗</span>
+                <h1 class="card-title">لینک تأیید نامعتبر است</h1>
+                <p class="card-subtitle">توکن امنیتی موجود در این پیوند یافت نشد یا پیش‌تر استفاده شده است.</p>
+                <a class="btn btn-outline btn-block" href="/account/settings/">بازگشت به تنظیمات حساب</a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
