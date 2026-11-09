@@ -1,0 +1,19 @@
+{% load static %}<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}صحنه‌نما | رزومه اهالی صحنه و سینما{% endblock %}</title>
+<link rel="stylesheet" href="{% static 'app.css' %}"></head>
+<body>
+<header class="site-header"><a class="brand" href="{% url 'home' %}"><span class="brand-icon" aria-hidden="true">◧</span> صحنه‌نما<span class="beta">نسخه اولیه</span></a>
+<nav aria-label="منوی اصلی">
+{% if user.is_authenticated %}
+<a href="{% url 'dashboard' %}">صفحه من</a><a href="{% url 'directory' %}">کشف هنرمندان</a><a href="{% url 'plans' %}">اشتراک و فضا</a>
+{% if user.is_staff %}<a href="{% url 'admin:index' %}">مدیریت</a>{% endif %}
+<form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}<button class="text-button">خروج</button></form>
+{% else %}<a href="{% url 'login' %}">ورود</a><a class="button small" href="{% url 'signup' %}">ساخت رزومه</a>{% endif %}
+</nav></header>
+<main class="container">
+{% for message in messages %}<div class="notice {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}
+{% block content %}{% endblock %}
+</main><footer class="site-footer"><span>صحنه‌نما</span><span>جایی برای دیده شدن تجربه و استعداد.</span><span>سینما · تئاتر · هنرهای نمایشی</span></footer>
+</body></html>

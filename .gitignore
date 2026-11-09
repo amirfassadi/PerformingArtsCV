@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+data/
+private-media/
+staticfiles/
+*.sqlite3
+*.log
+.pytest_cache/
+backups/
+playwright-report/
+test-results/
