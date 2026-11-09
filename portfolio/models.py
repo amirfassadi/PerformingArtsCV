@@ -1,6 +1,8 @@
+import secrets
 import uuid
 from pathlib import Path
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
@@ -50,6 +52,83 @@ class Profile(models.Model):
 
     def __str__(self):
         return self.display_name
+
+def generate_invitation_token():
+    return secrets.token_urlsafe(32)
+
+class InvitationLink(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='invitation_link',
+        verbose_name='صاحب لینک',
+    )
+    token = models.CharField(max_length=64, unique=True, default=generate_invitation_token, editable=False)
+    is_active = models.BooleanField('فعال', default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField('آخرین ثبت‌نام موفق', null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'لینک دعوت'
+        verbose_name_plural = 'لینک‌های دعوت'
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            original = type(self).objects.filter(pk=self.pk).values('user_id', 'token').first()
+            if original and (original['user_id'] != self.user_id or original['token'] != self.token):
+                raise ValidationError('صاحب لینک و شناسه آن پس از ایجاد قابل تغییر نیستند.')
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'دعوت‌های {self.user}'
+
+class Invitation(models.Model):
+    inviter = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='sent_invitations',
+        verbose_name='دعوت‌کننده',
+    )
+    invitee = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='invitation',
+        verbose_name='دعوت‌شده',
+    )
+    link = models.ForeignKey(
+        InvitationLink,
+        on_delete=models.PROTECT,
+        related_name='registrations',
+        verbose_name='لینک استفاده‌شده',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'رابطه دعوت'
+        verbose_name_plural = 'روابط دعوت'
+        ordering = ['-created_at']
+
+    def clean(self):
+        if self.link_id and self.inviter_id != self.link.user_id:
+            raise ValidationError({'inviter': 'دعوت‌کننده باید صاحب لینک استفاده‌شده باشد.'})
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            original = type(self).objects.filter(pk=self.pk).values('inviter_id', 'invitee_id', 'link_id').first()
+            if original and any(original[field] != getattr(self, field) for field in ('inviter_id', 'invitee_id', 'link_id')):
+                raise ValidationError('رابطه دعوت پس از ثبت قابل تغییر نیست.')
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    @property
+    def invitee_display_name(self):
+        try:
+            return self.invitee.profile.display_name
+        except Profile.DoesNotExist:
+            return 'نام ثبت نشده'
+
+    def __str__(self):
+        return f'{self.inviter} ← {self.invitee}'
 
 class WorkLink(models.Model):
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='links')

@@ -1,1 +1,22 @@
-{% extends 'base.html' %}{% block content %}<section class="form-card"><p class="eyebrow">شروع یک روایت تازه</p><h1>حسابت را بساز</h1><p class="muted">صفحه خودت را بساز و آثارت را اضافه کن. دیدن رزومه دیگران اشتراک جدا می‌خواهد.</p><form method="post">{% csrf_token %}{{ form.as_p }}<button class="button">ثبت‌نام و ساخت صفحه</button></form><p class="muted">قبلاً ثبت‌نام کردی؟ <a href="{% url 'login' %}">وارد شو</a></p></section>{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<section class="form-card">
+    <p class="eyebrow">شروع یک روایت تازه</p>
+    {% if invalid_invitation %}
+        <h1>لینک دعوت معتبر نیست</h1>
+        <p class="notice">این لینک پیدا نشد یا غیرفعال شده است. برای ثبت‌نام، لینک دعوت فعال لازم است.</p>
+    {% elif requires_invitation %}
+        <h1>ثبت‌نام با دعوت</h1>
+        <p class="notice">ساخت حساب فقط از طریق لینک دعوت فعال ممکن است. اگر دعوت شده‌ای، لینک اختصاصی را از دعوت‌کننده دریافت کن.</p>
+    {% else %}
+        <h1>حسابت را بساز</h1>
+        <p class="muted">صفحه خودت را بساز و آثارت را اضافه کن. دیدن رزومه دیگران اشتراک جدا می‌خواهد.</p>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button class="button">ثبت‌نام و ساخت صفحه</button>
+        </form>
+    {% endif %}
+    <p class="muted">قبلاً ثبت‌نام کردی؟ <a href="{% url 'login' %}">وارد شو</a></p>
+</section>
+{% endblock %}

@@ -16,3 +16,5 @@ jobs:
       - run: python manage.py makemigrations --check --dry-run
       - run: python manage.py test
       - run: python scripts/concurrency_smoke.py
+      - run: python scripts/invitation_concurrency_smoke.py
+      - run: python scripts/invitation_migration_smoke.py

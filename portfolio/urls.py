@@ -5,6 +5,7 @@ from . import payment_views
 urlpatterns = [
     path('', views.home, name='home'),
     path('signup/', views.signup, name='signup'),
+    path('signup/<str:token>/', views.signup, name='signup-invitation'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('dashboard/edit/', views.edit_profile, name='edit-profile'),
     path('dashboard/links/add/', views.add_link, name='add-link'),

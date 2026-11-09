@@ -21,7 +21,7 @@ from .access import can_browse, storage_quota, storage_used
 from .billing import start_payment, verify_payment
 from .forms import UploadForm
 from .gateway import GatewayError, Zarinpal
-from .models import MB, Entitlement, Payment, Plan, PortfolioFile, Profile, SiteSettings
+from .models import MB, Entitlement, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings
 from .services import add_file
 
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
@@ -54,16 +54,138 @@ class ProductTests(TestCase):
             'title': 'تصویر تست', 'file': SimpleUploadedFile('work.png', payload, 'image/png'),
         })
 
-    def test_signup_creates_only_own_profile_and_no_browse_access(self):
-        response = self.client.post(reverse('signup'), {
+    def test_invited_signup_creates_one_profile_and_one_immutable_relation_without_rewards(self):
+        response = self.client.post(reverse('signup-invitation', args=[self.owner.invitation_link.token]), {
             'username': 'new-artist', 'email': 'artist@example.test',
             'password1': 'Fresh-artist-password!', 'password2': 'Fresh-artist-password!',
         })
         self.assertRedirects(response, reverse('dashboard'))
         user = User.objects.get(username='new-artist')
         self.assertEqual(Profile.objects.filter(user=user).count(), 1)
+        invitation = Invitation.objects.get(invitee=user)
+        self.assertEqual(invitation.inviter, self.owner)
+        self.assertEqual(invitation.link, self.owner.invitation_link)
+        self.assertEqual(InvitationLink.objects.filter(user=user).count(), 1)
         self.assertFalse(can_browse(user))
         self.assertEqual(storage_quota(user), 100 * MB)
+        self.assertFalse(Entitlement.objects.filter(user=user).exists())
+        self.assertFalse(Payment.objects.filter(user=user).exists())
+
+    def test_signup_requires_a_valid_active_invitation(self):
+        response = self.client.get(reverse('signup'))
+        self.assertContains(response, 'ساخت حساب فقط از طریق لینک دعوت فعال ممکن است')
+
+        invalid_path = reverse('signup-invitation', args=['unknown-token'])
+        self.assertEqual(self.client.get(invalid_path).status_code, 404)
+        response = self.client.post(invalid_path, {
+            'username': 'no-invite', 'email': 'no-invite@example.test',
+            'password1': 'Fresh-artist-password!', 'password2': 'Fresh-artist-password!',
+        })
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(User.objects.filter(username='no-invite').exists())
+
+    def test_invited_signup_keeps_csrf_protection(self):
+        client = Client(enforce_csrf_checks=True)
+        path = reverse('signup-invitation', args=[self.owner.invitation_link.token])
+        client.get(path)
+        csrf_token = client.cookies['csrftoken'].value
+        data = {
+            'username': 'csrf-invitee', 'email': 'csrf@example.test',
+            'password1': 'Fresh-artist-password!', 'password2': 'Fresh-artist-password!',
+        }
+
+        self.assertEqual(client.post(path, data).status_code, 403)
+        self.assertFalse(User.objects.filter(username='csrf-invitee').exists())
+        self.assertEqual(client.post(path, data, HTTP_X_CSRFTOKEN=csrf_token).status_code, 302)
+
+    def test_disabled_invitation_blocks_a_signup_posted_after_link_was_opened(self):
+        link = self.owner.invitation_link
+        path = reverse('signup-invitation', args=[link.token])
+        self.assertEqual(self.client.get(path).status_code, 200)
+        link.is_active = False
+        link.save(update_fields=['is_active'])
+
+        response = self.client.post(path, {
+            'username': 'disabled-invite', 'email': 'disabled@example.test',
+            'password1': 'Fresh-artist-password!', 'password2': 'Fresh-artist-password!',
+        })
+        self.assertEqual(response.status_code, 404)
+        self.assertContains(response, 'لینک دعوت معتبر نیست', status_code=404)
+        self.assertFalse(User.objects.filter(username='disabled-invite').exists())
+        self.assertFalse(Invitation.objects.filter(link=link).exists())
+
+    def test_invitation_link_is_reusable_for_multiple_registrations(self):
+        link = self.owner.invitation_link
+        for username in ('invite-one', 'invite-two'):
+            response = self.client.post(reverse('signup-invitation', args=[link.token]), {
+                'username': username, 'email': f'{username}@example.test',
+                'password1': 'Fresh-artist-password!', 'password2': 'Fresh-artist-password!',
+            })
+            self.assertRedirects(response, reverse('dashboard'))
+            self.client.logout()
+
+        self.assertEqual(Invitation.objects.filter(link=link).count(), 2)
+        self.assertEqual(User.objects.get(username='invite-one').invitation.inviter, self.owner)
+        self.assertEqual(User.objects.get(username='invite-two').invitation.inviter, self.owner)
+
+    def test_existing_account_opening_a_link_does_not_create_an_invitation(self):
+        link = self.owner.invitation_link
+        self.client.force_login(self.viewer)
+        response = self.client.get(reverse('signup-invitation', args=[link.token]))
+        self.assertRedirects(response, reverse('dashboard'))
+        self.assertFalse(Invitation.objects.filter(invitee=self.viewer).exists())
+        self.assertEqual(Profile.objects.filter(user=self.viewer).count(), 1)
+        link.refresh_from_db()
+        self.assertIsNone(link.last_used_at)
+
+    def test_invitation_relationship_cannot_be_reassigned(self):
+        link = self.owner.invitation_link
+        invitee = User.objects.create_user('immutable-invitee', password='Invitee-strong-password!')
+        invitation = Invitation.objects.create(inviter=self.owner, invitee=invitee, link=link)
+        invitation.inviter = self.viewer
+        with self.assertRaises(ValidationError):
+            invitation.save()
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.inviter, self.owner)
+
+    def test_dashboard_shows_copyable_link_and_invitee_display_name_only(self):
+        invitee = User.objects.create_user('private-invitee', email='private@example.test')
+        Profile.objects.create(user=invitee, display_name='نام نمایشی دعوت‌شده')
+        Invitation.objects.create(inviter=self.owner, invitee=invitee, link=self.owner.invitation_link)
+
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, reverse('signup-invitation', args=[self.owner.invitation_link.token]))
+        self.assertContains(response, 'نام نمایشی دعوت‌شده')
+        self.assertNotContains(response, 'private@example.test')
+        self.assertEqual(response.context['invite_count'], 1)
+
+    def test_dashboard_does_not_offer_a_disabled_invitation_link(self):
+        link = self.owner.invitation_link
+        link.is_active = False
+        link.save(update_fields=['is_active'])
+        self.client.force_login(self.owner)
+
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, 'لینک دعوت این حساب توسط مدیر غیرفعال شده است')
+        self.assertNotContains(response, link.token)
+        self.assertEqual(response.context['invite_count'], 0)
+
+    def test_admin_can_inspect_invitations_and_disable_links(self):
+        invitee = User.objects.create_user('admin-visible-invitee')
+        Profile.objects.create(user=invitee, display_name='دعوت‌شده برای مدیر')
+        link = self.owner.invitation_link
+        Invitation.objects.create(inviter=self.owner, invitee=invitee, link=link)
+        admin_user = User.objects.create_superuser('invitation-admin', email='admin@example.test', password='Admin-strong-password!')
+        self.client.force_login(admin_user)
+
+        self.assertContains(self.client.get(reverse('admin:portfolio_invitation_changelist')), 'دعوت‌شده برای مدیر')
+        change_url = reverse('admin:portfolio_invitationlink_change', args=[link.pk])
+        response = self.client.post(change_url, {'is_active': '', '_save': 'ذخیره'})
+        self.assertEqual(response.status_code, 302)
+        link.refresh_from_db()
+        self.assertFalse(link.is_active)
+        self.assertTrue(Invitation.objects.filter(invitee=invitee).exists())
 
     def test_anonymous_cannot_read_profile_or_directory(self):
         for path in [reverse('profile', args=[self.artist.pk]), reverse('directory')]:
