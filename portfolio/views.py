@@ -23,7 +23,7 @@ def home(request):
 def _render_signup(request, context, status=200):
     response = render(request, 'registration/signup.html', context, status=status)
     response['Cache-Control'] = 'private, no-store'
-    response['Referrer-Policy'] = 'no-referrer'
+    response['Referrer-Policy'] = 'strict-origin'
     response['X-Robots-Tag'] = 'noindex, nofollow'
     return response
 

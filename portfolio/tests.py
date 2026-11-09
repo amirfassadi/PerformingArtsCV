@@ -87,7 +87,8 @@ class ProductTests(TestCase):
     def test_invited_signup_keeps_csrf_protection(self):
         client = Client(enforce_csrf_checks=True)
         path = reverse('signup-invitation', args=[self.owner.invitation_link.token])
-        client.get(path)
+        response = client.get(path)
+        self.assertEqual(response['Referrer-Policy'], 'strict-origin')
         csrf_token = client.cookies['csrftoken'].value
         data = {
             'username': 'csrf-invitee', 'email': 'csrf@example.test',
