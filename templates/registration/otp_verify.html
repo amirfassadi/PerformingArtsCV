@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}تأیید شماره همراه | درباره‌ی من{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+    <div class="form-art-card art-panel">
+        <div class="card-badge-top">
+            <span class="badge-dot"></span>
+            <span>احراز مالکیت شماره خط</span>
+        </div>
+
+        <h1 class="card-title">تأیید شماره همراه</h1>
+        <p class="card-subtitle">کد تایید ۵ رقمی به شماره <strong dir="ltr" class="phone-display">{{ phone_number|default:'۰۹۱۲۰۰۰۰۰۰۰' }}</strong> پیامک شد.</p>
+
+        <div class="disclaimer-note">
+            <span class="disc-icon">ℹ</span>
+            <span>تأیید شماره همراه صرفاً احراز مالکیت خط است و به معنی «احراز هویت حرفه‌ای» یا تأیید صلاحیت‌های هنری نیست. شماره همراه شما در رزومه عمومی نمایش داده نمی‌شود.</span>
+        </div>
+
+        <form method="post" class="otp-form" id="otp-form">
+            {% csrf_token %}
+            <label for="otp-code">کد تایید ۵ رقمی:</label>
+
+            <div class="otp-inputs-row" dir="ltr">
+                <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]*" inputmode="numeric" autofocus autocomplete="one-time-code">
+                <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                <input type="text" class="otp-digit" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+            </div>
+
+            <input type="hidden" name="code" id="otp-full-code">
+
+            {% if error_message %}
+                <div class="notice notice-danger">{{ error_message }}</div>
+            {% endif %}
+
+            <div class="timer-row">
+                <span id="countdown-text">ارسال مجدد کد پس از: <strong id="timer-sec">۰۱:۵۹</strong></span>
+                <button type="button" id="resend-btn" class="text-link-btn" style="display:none;">ارسال دوباره کد پیامکی</button>
+            </div>
+
+            <button class="btn btn-primary btn-block btn-lg" type="submit">تایید شماره و ورود به ساخت رزومه</button>
+        </form>
+
+        <div class="auth-footer-note">
+            <p>شماره را اشتباه وارد کرده‌اید؟ <a class="text-link" href="{% url 'signup' %}">اصلاح شماره همراه</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

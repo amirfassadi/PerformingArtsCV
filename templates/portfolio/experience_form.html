@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% block title %}{{ title|default:'سوابق کاری و پروژه‌ها' }} | درباره‌ی من{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+    <div class="form-art-card art-panel wide-card">
+        <a class="back-link" href="{% url 'edit-profile' %}">→ بازگشت به ویرایشگر رزومه</a>
+
+        <div class="card-badge-top">
+            <span class="badge-dot"></span>
+            <span>بخش سوابق کاری و پروژه‌ها</span>
+        </div>
+
+        <h1 class="card-title">{{ title|default:'ثبت اثر، پروژه و همکاران' }}</h1>
+        <p class="card-subtitle">مشخصات اجرای صحنه‌ای، فیلم، سریال یا پروژه هنری خود را ثبت نمایید.</p>
+
+        <form method="post" class="experience-form">
+            {% csrf_token %}
+
+            <div class="form-row-2col">
+                <div class="form-group">
+                    <label for="id_project_title">نام اثر یا پروژه <span class="required">*</span></label>
+                    <input type="text" id="id_project_title" name="project_title" required placeholder="مثلاً: نمایش هملت، فیلم سینمایی فروشنده">
+                </div>
+
+                <div class="form-group">
+                    <label for="id_activity_type">نوع فعالیت <span class="required">*</span></label>
+                    <select id="id_activity_type" name="activity_type" required>
+                        <option value="theater">تئاتر و صحنه</option>
+                        <option value="feature_film">فیلم سینمایی بلند</option>
+                        <option value="short_film">فیلم کوتاه</option>
+                        <option value="series">سریال و نمایش خانگی</option>
+                        <option value="telefilm">تله‌فیلم / تله‌تئاتر</option>
+                        <option value="commercial">تیزر تبلیغاتی / پرفورمنس</option>
+                        <option value="other">سایر فعالیت‌های هنری</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row-2col">
+                <div class="form-group">
+                    <label for="id_role">نقش یا مسئولیت شما <span class="required">*</span></label>
+                    <input type="text" id="id_role" name="role" required placeholder="مثلاً: بازیگر اصلی، کارگردان، طراح نور، فیلمبردار">
+                </div>
+
+                <div class="form-group">
+                    <label for="id_character_name">نام کاراکتر یا شخصیت (ویژه بازیگری)</label>
+                    <input type="text" id="id_character_name" name="character_name" placeholder="مثلاً: کلادیوس، سهراب، نقش مکمل زن">
+                </div>
+            </div>
+
+            <div class="form-row-3col">
+                <div class="form-group">
+                    <label for="id_start_date">سال یا تاریخ شروع <span class="required">*</span></label>
+                    <input type="text" id="id_start_date" name="start_date" required placeholder="مثلاً: ۱۴۰۱ یا پاییز ۱۴۰۲">
+                </div>
+
+                <div class="form-group">
+                    <label for="id_end_date">سال یا تاریخ پایان</label>
+                    <input type="text" id="id_end_date" name="end_date" placeholder="مثلاً: زمستان ۱۴۰۲">
+                </div>
+
+                <div class="form-group checkbox-cell">
+                    <label class="custom-checkbox-label">
+                        <input type="checkbox" name="is_ongoing" id="id_is_ongoing" value="1">
+                        <span class="checkmark"></span>
+                        <span>همکاری همچنان ادامه دارد</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="id_production_group">نام گروه، سالن تئاتر، شرکت یا کمپانی تولیدکننده</label>
+                <input type="text" id="id_production_group" name="production_group" placeholder="مثلاً: تماشاخانه ایرانشهر، مرکز گسترش سینمای مستند و تجربی">
+            </div>
+
+            <div class="form-group">
+                <label for="id_description">شرح فعالیت و مسئولیت‌های اجرایی</label>
+                <textarea id="id_description" name="description" rows="3" placeholder="توضیح نقش، مدت‌زمان اجرا در تالار، جوایز یا افتخارات پروژه در جشنواره‌ها..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="id_external_url">پیوند وب اینترنتی یا تیزر اثر (اختیاری)</label>
+                <input type="url" id="id_external_url" name="external_url" placeholder="https://...">
+            </div>
+
+            <!-- بخش افزودن همکاران پروژه -->
+            <div class="collaborators-fieldset">
+                <div class="collab-header">
+                    <h4>همکاران این پروژه (با چه افرادی کار کرده‌اید؟)</h4>
+                    <span class="collab-note">درج نام همکار صرفاً به عنوان سابقه ثبت می‌شود و به معنی تأیید متقابل رزومه توسط ایشان نیست.</span>
+                </div>
+
+                <div id="collaborators-list-container">
+                    <div class="collab-item-row">
+                        <input type="text" name="collab_name[]" placeholder="نام و نام خانوادگی همکار (مثلاً: اصغر فرهادی)" class="form-control">
+                        <input type="text" name="collab_role[]" placeholder="سمت او در پروژه (مثلاً: کارگردان، طراح صحنه)" class="form-control">
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-secondary btn-sm mt-2" onclick="addCollaboratorRow()">+ افزودن همکار دیگر</button>
+            </div>
+
+            <div class="form-actions-row">
+                <button class="btn btn-primary btn-lg" type="submit">ذخیره پروژه و سوابق</button>
+                <a class="btn btn-outline" href="{% url 'edit-profile' %}">انصراف</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function addCollaboratorRow() {
+    const container = document.getElementById('collaborators-list-container');
+    const div = document.createElement('div');
+    div.className = 'collab-item-row mt-2';
+    div.innerHTML = `
+        <input type="text" name="collab_name[]" placeholder="نام همکار" class="form-control">
+        <input type="text" name="collab_role[]" placeholder="سمت در پروژه" class="form-control">
+    `;
+    container.appendChild(div);
+}
+</script>
+{% endblock %}

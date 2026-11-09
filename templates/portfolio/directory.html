@@ -1,4 +1,87 @@
-{% extends 'base.html' %}{% block content %}<div class="page-heading"><div><p class="eyebrow">کشف و انتخاب</p><h1>استعدادِ نقش بعدی تو</h1><p class="muted">رزومه‌های منتشرشده اهالی سینما و تئاتر را پیدا کن.</p></div></div>
-<form method="get" class="search-panel panel"><div><label for="q">نام، تخصص یا مهارت</label><input id="q" name="q" value="{{ q }}" placeholder="مثلاً بازیگر یا بداهه‌پردازی"></div><div><label for="city">شهر</label><input id="city" name="city" value="{{ city }}" placeholder="همه شهرها"></div><label class="checkbox-label"><input type="checkbox" name="favorites" value="1" {% if only_favorites %}checked{% endif %}> فقط منتخب‌های من</label><button class="button">جست‌وجو</button></form>
-<div class="artist-grid">{% for artist in page %}<a class="artist-card" href="{% url 'profile' artist.pk %}"><div class="artist-initial">{{ artist.display_name|first }}</div><div><span class="tag">{{ artist.city|default:'سینما و تئاتر' }}</span><h2>{{ artist.display_name }}</h2><p>{{ artist.specialty|default:'هنرمند' }}</p><p class="muted">{{ artist.skills|truncatechars:90 }}</p><span class="card-link">مشاهده رزومه ←</span></div></a>{% empty %}<div class="empty-state panel"><h2>رزومه‌ای پیدا نشد</h2><p>عبارت یا فیلترها را تغییر بده. فقط رزومه‌های منتشرشده در نتایج دیده می‌شوند.</p></div>{% endfor %}</div>
-{% if page.has_other_pages %}<nav class="pagination" aria-label="صفحه‌بندی">{% if page.has_previous %}<a href="?q={{ q|urlencode }}&city={{ city|urlencode }}&favorites={% if only_favorites %}1{% endif %}&page={{ page.previous_page_number }}">صفحه قبل</a>{% endif %}<span>{{ page.number }} / {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?q={{ q|urlencode }}&city={{ city|urlencode }}&favorites={% if only_favorites %}1{% endif %}&page={{ page.next_page_number }}">صفحه بعد</a>{% endif %}</nav>{% endif %}{% endblock %}
+{% extends 'base.html' %}
+{% block title %}کشف و انتخاب استعدادها | درباره‌ی من{% endblock %}
+
+{% block content %}
+<div class="directory-hero">
+    <div class="badge-stage">
+        <span class="badge-dot"></span>
+        <span>بانک اطلاعاتی اهالی سینما و تئاتر</span>
+    </div>
+    <h1 class="page-title">کشف هنرمندان و بازیگران</h1>
+    <p class="page-subtitle">جست‌وجو در میان رزومه‌های معتبر و منتشرشده فعالان صحنه، تصویر و تولید هنری.</p>
+</div>
+
+<form method="get" class="art-panel search-filter-box">
+    <div class="search-inputs-grid">
+        <div class="form-group">
+            <label for="q">نام، تخصص، نقش یا مهارت</label>
+            <input type="text" id="q" name="q" value="{{ q }}" placeholder="مثلاً: بازیگر، کارگردان، طراحی صحنه، بداهه...">
+        </div>
+
+        <div class="form-group">
+            <label for="city">شهر محل فعالیت</label>
+            <input type="text" id="city" name="city" value="{{ city }}" placeholder="همه شهرها (مثلاً: تهران، اصفهان، شیراز)">
+        </div>
+
+        <div class="form-group checkbox-group">
+            <label class="custom-checkbox-label">
+                <input type="checkbox" name="favorites" value="1" {% if only_favorites %}checked{% endif %}>
+                <span class="checkmark"></span>
+                <span>فقط افراد منتخب من (نشان‌شده‌ها)</span>
+            </label>
+        </div>
+
+        <div class="form-group search-btn-group">
+            <button class="btn btn-primary btn-block" type="submit">جست‌وجوی رزومه‌ها</button>
+        </div>
+    </div>
+</form>
+
+<div class="artists-directory-grid">
+    {% for artist in page %}
+        <article class="artist-card-box">
+            <div class="card-top-accent">
+                <span class="artist-city-pill">{{ artist.city|default:'سینما و تئاتر' }}</span>
+                <span class="badge-verified">کارنامه تأیید شماره</span>
+            </div>
+
+            <div class="artist-card-body">
+                <div class="artist-avatar-circle">
+                    <span>{{ artist.display_name|first }}</span>
+                </div>
+                <h2 class="artist-card-title">{{ artist.display_name }}</h2>
+                <p class="artist-specialty-line">{{ artist.specialty|default:'هنرمند سینما و تئاتر' }}</p>
+                <p class="artist-skills-line">{{ artist.skills|default:'مهارت‌ها هنوز مشخص نشده است.'|truncatechars:95 }}</p>
+            </div>
+
+            <div class="artist-card-footer">
+                <a class="btn btn-outline btn-sm btn-block" href="{% url 'profile' artist.pk %}">
+                    <span>مشاهده کامل رزومه و آثار</span>
+                    <span class="arrow-icon">←</span>
+                </a>
+            </div>
+        </article>
+    {% empty %}
+        <div class="art-panel empty-directory-card">
+            <span class="empty-icon-large">⌕</span>
+            <h2>هیچ رزومه‌ای با این مشخصات یافت نشد</h2>
+            <p>لطفاً عبارات جست‌وجو را بازتر بنویسید یا فیلتر شهر را تغییر دهید. توجه فرمایید که تنها رزومه‌هایی نمایش داده می‌شوند که توسط خود هنرمند منتشر شده باشند.</p>
+            <a class="btn btn-outline btn-sm" href="{% url 'directory' %}">پاک کردن فیلترها</a>
+        </div>
+    {% endfor %}
+</div>
+
+{% if page.has_other_pages %}
+    <nav class="pagination-bar" aria-label="صفحه‌بندی نتایج">
+        {% if page.has_previous %}
+            <a class="btn btn-secondary btn-sm" href="?q={{ q|urlencode }}&city={{ city|urlencode }}&favorites={% if only_favorites %}1{% endif %}&page={{ page.previous_page_number }}">← صفحه قبلی</a>
+        {% endif %}
+
+        <span class="page-current-info">صفحه {{ page.number }} از {{ page.paginator.num_pages }}</span>
+
+        {% if page.has_next %}
+            <a class="btn btn-secondary btn-sm" href="?q={{ q|urlencode }}&city={{ city|urlencode }}&favorites={% if only_favorites %}1{% endif %}&page={{ page.next_page_number }}">صفحه بعدی →</a>
+        {% endif %}
+    </nav>
+{% endif %}
+{% endblock %}

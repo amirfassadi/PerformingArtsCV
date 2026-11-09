@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+{% block title %}تنظیمات حساب کاربری | درباره‌ی من{% endblock %}
+
+{% block content %}
+<div class="settings-wrap">
+    <div class="badge-stage">
+        <span class="badge-dot"></span>
+        <span>اطلاعات ورود و امنیت حساب</span>
+    </div>
+    <h1 class="page-title">تنظیمات حساب کاربری</h1>
+    <p class="page-subtitle">شماره همراه تأییدشده و وضعیت نشانی ایمیل خود را بررسی و مدیریت نمایید.</p>
+
+    <div class="settings-grid">
+        <!-- بخش ۱: شماره همراه -->
+        <section class="art-panel">
+            <div class="panel-header-flex">
+                <div>
+                    <h2 class="panel-header-title">شماره همراه حساب</h2>
+                    <p class="panel-header-sub">شناسه اصلی ورود و احراز مالکیت حساب کاربری شما.</p>
+                </div>
+                <span class="status-chip active">✓ تأیید شده</span>
+            </div>
+
+            <div class="field-display-box">
+                <div class="field-row">
+                    <span class="lbl">شماره همراه فعلی:</span>
+                    <span class="val bold-val" dir="ltr">{{ user_phone|default:'۰۹۱۲۰۰۰۰۰۰۰' }}</span>
+                </div>
+                <div class="field-row">
+                    <span class="lbl">نمایش در رزومه:</span>
+                    <span class="val text-muted">خیر (محفوظ نزد پلتفرم)</span>
+                </div>
+            </div>
+
+            <div class="change-phone-box">
+                <h4>تغییر شماره همراه:</h4>
+                <p class="muted-note">در صورت تغییر شماره، کد تأیید جدید به خط جدید ارسال خواهد شد و تا زمان تأیید، شماره قبلی معتبر باقی می‌ماند.</p>
+                <form method="post" action="/account/change-phone/" class="inline-flex-form">
+                    {% csrf_token %}
+                    <input type="text" name="new_phone" placeholder="۰۹۱۲۳۴۵۶۷۸۹" dir="ltr" class="form-control">
+                    <button class="btn btn-outline" type="submit">ارسال کد به شماره جدید</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- بخش ۲: نشانی ایمیل و وضعیت تأیید آن -->
+        <section class="art-panel">
+            <div class="panel-header-flex">
+                <div>
+                    <h2 class="panel-header-title">نشانی ایمیل و بازیابی</h2>
+                    <p class="panel-header-sub">ایمیل برای اطلاع‌رسانی سفارش‌ها و بازیابی حساب در صورت مفقودی سیم‌کارت کاربرد دارد.</p>
+                </div>
+
+                {% if email_status == 'verified' %}
+                    <span class="status-chip active">✓ تأیید شده</span>
+                {% elif email_status == 'pending' %}
+                    <span class="status-chip pending">◎ در انتظار تأیید</span>
+                {% else %}
+                    <span class="status-chip unverified">✗ ثبت نشده</span>
+                {% endif %}
+            </div>
+
+            <div class="email-status-details">
+                {% if email_status == 'verified' %}
+                    <div class="notice notice-success">
+                        <span class="notice-icon">✓</span>
+                        <div>
+                            <strong>ایمیل شما تأیید شده است:</strong>
+                            <p dir="ltr">{{ user.email }}</p>
+                        </div>
+                    </div>
+                {% elif email_status == 'pending' %}
+                    <div class="notice notice-warning">
+                        <span class="notice-icon">✉</span>
+                        <div>
+                            <strong>لینک تأیید به نشانی {{ user.email }} ارسال شده است.</strong>
+                            <p>لطفاً صندوق ورودی (Inbox یا Spam) خود را بررسی کنید. تأیید ایمیل در این فاز اختیاری است و مانع فعالیت هنری شما در سامانه نمی‌شود.</p>
+                            <form method="post" action="/account/resend-email-verification/" class="mt-2">
+                                {% csrf_token %}
+                                <button class="btn btn-secondary btn-sm" type="submit">ارسال مجدد لینک تأیید ایمیل</button>
+                            </form>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="notice notice-info">
+                        <span class="notice-icon">ℹ</span>
+                        <div>
+                            <strong>هنوز ایمیلی ثبت نکرده‌اید.</strong>
+                            <p>پیشنهاد می‌شود جهت اطمینان از امکان بازیابی آسان حساب، یک آدرس ایمیل معتبر ثبت فرمایید.</p>
+                        </div>
+                    </div>
+                {% endif %}
+
+                <form method="post" action="/account/update-email/" class="email-update-form">
+                    {% csrf_token %}
+                    <label for="id_email">ثبت یا ویرایش ایمیل:</label>
+                    <div class="inline-flex-form">
+                        <input type="email" id="id_email" name="email" value="{{ user.email }}" placeholder="artist@example.com" dir="ltr" class="form-control">
+                        <button class="btn btn-primary" type="submit">ذخیره و ارسال لینک تأیید</button>
+                    </div>
+                </form>
+
+                <small class="muted-note">نشانی ایمیل حساب هرگز در رزومه عمومی نمایش داده نمی‌شود. برای راه‌های ارتباطی رزومه، از فیلد «راه ارتباط حرفه‌ای» در فرم رزومه استفاده فرمایید.</small>
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}
