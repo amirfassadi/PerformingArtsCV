@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Entitlement, Payment, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
+from .models import Entitlement, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
 
 admin.site.site_header = 'مدیریت صحنه‌نما'
 admin.site.site_title = 'صحنه‌نما'
@@ -24,6 +24,45 @@ class ProfileAdmin(admin.ModelAdmin):
     list_filter = ['published']
     search_fields = ['display_name', 'user__username']
     inlines = [WorkLinkInline]
+
+@admin.register(InvitationLink)
+class InvitationLinkAdmin(admin.ModelAdmin):
+    list_display = ['user', 'is_active', 'created_at', 'last_used_at']
+    list_filter = ['is_active']
+    search_fields = ['user__username']
+    readonly_fields = ['user', 'token', 'created_at', 'last_used_at']
+    list_editable = ['is_active']
+    actions = ['deactivate_links']
+
+    @admin.action(description='غیرفعال‌کردن لینک‌های دعوت انتخاب‌شده')
+    def deactivate_links(self, request, queryset):
+        queryset.update(is_active=False)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+@admin.register(Invitation)
+class InvitationAdmin(admin.ModelAdmin):
+    list_display = ['inviter', 'invitee_display_name', 'invitee', 'link_owner', 'created_at']
+    search_fields = ['inviter__username', 'invitee__username', 'invitee__profile__display_name']
+    readonly_fields = ['inviter', 'invitee', 'link', 'created_at']
+
+    @admin.display(description='نام نمایشی دعوت‌شده')
+    def invitee_display_name(self, obj):
+        return obj.invitee_display_name
+
+    @admin.display(description='صاحب لینک')
+    def link_owner(self, obj):
+        return obj.link.user
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):

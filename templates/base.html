@@ -10,7 +10,7 @@
 <a href="{% url 'dashboard' %}">صفحه من</a><a href="{% url 'directory' %}">کشف هنرمندان</a><a href="{% url 'plans' %}">اشتراک و فضا</a>
 {% if user.is_staff %}<a href="{% url 'admin:index' %}">مدیریت</a>{% endif %}
 <form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}<button class="text-button">خروج</button></form>
-{% else %}<a href="{% url 'login' %}">ورود</a><a class="button small" href="{% url 'signup' %}">ساخت رزومه</a>{% endif %}
+{% else %}<a href="{% url 'login' %}">ورود</a><a class="button small" href="{% url 'signup' %}">ثبت‌نام با دعوت</a>{% endif %}
 </nav></header>
 <main class="container">
 {% for message in messages %}<div class="notice {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}

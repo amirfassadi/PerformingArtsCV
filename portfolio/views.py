@@ -1,9 +1,9 @@
 from django.contrib import messages
 from django.conf import settings
-from django.contrib.auth import login
+from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError
 from django.db.models import Q
 from django.http import FileResponse, HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -12,24 +12,46 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from .access import can_browse, can_view_profile, storage_quota, storage_used
 from .forms import ProfileForm, SignupForm, UploadForm, WorkLinkForm
-from .models import MB, Favorite, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
+from .invitations import InvitationUnavailable, register_invited_user
+from .models import MB, Favorite, InvitationLink, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
 from .services import add_file, remove_file
 from .media import LimitedFileIterator, parse_range
 
 def home(request):
     return render(request, 'portfolio/home.html', {'free_mb': SiteSettings.current().free_storage_mb})
 
-def signup(request):
+def _render_signup(request, context, status=200):
+    response = render(request, 'registration/signup.html', context, status=status)
+    response['Cache-Control'] = 'private, no-store'
+    response['Referrer-Policy'] = 'strict-origin'
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
+
+@never_cache
+def signup(request, token=None):
     if request.user.is_authenticated:
         return redirect('dashboard')
-    form = SignupForm(request.POST or None)
+
+    if not token:
+        return _render_signup(request, {'requires_invitation': True})
+    link = InvitationLink.objects.filter(token=token, is_active=True).select_related('user').first()
+    if link is None:
+        return _render_signup(request, {'invalid_invitation': True}, status=404)
+
+    form = SignupForm(request.POST if request.method == 'POST' else None)
     if request.method == 'POST' and form.is_valid():
-        with transaction.atomic():
-            user = form.save()
-            Profile.objects.create(user=user, display_name=user.username)
-        login(request, user)
-        return redirect('dashboard')
-    return render(request, 'registration/signup.html', {'form': form})
+        try:
+            user = register_invited_user(form, token)
+        except InvitationUnavailable:
+            return _render_signup(request, {'invalid_invitation': True}, status=404)
+        except IntegrityError:
+            if not get_user_model().objects.filter(username=form.cleaned_data['username']).exists():
+                raise
+            form.add_error('username', 'این نام کاربری هم‌زمان توسط حساب دیگری ثبت شد؛ نام دیگری انتخاب کنید.')
+        else:
+            login(request, user)
+            return redirect('dashboard')
+    return _render_signup(request, {'form': form, 'invitation': link})
 
 def own_profile(user):
     return Profile.objects.get_or_create(user=user, defaults={'display_name': user.username})[0]
@@ -39,11 +61,16 @@ def own_profile(user):
 def dashboard(request):
     profile = own_profile(request.user)
     quota, used = storage_quota(request.user), storage_used(profile)
+    invitation_link, _ = InvitationLink.objects.get_or_create(user=request.user)
+    invitees = request.user.sent_invitations.select_related('invitee__profile')
     return render(request, 'portfolio/dashboard.html', {
         'profile': profile, 'quota_mb': quota / MB, 'used_mb': used / MB,
         'remaining_mb': max(0, quota - used) / MB,
         'usage_percent': min(100, used * 100 / quota) if quota else (100 if used else 0),
         'browse_active': can_browse(request.user), 'over_quota': used > quota,
+        'invitation_link_active': invitation_link.is_active,
+        'invitation_url': request.build_absolute_uri(reverse('signup-invitation', args=[invitation_link.token])),
+        'invitees': invitees, 'invite_count': invitees.count(),
     })
 
 @never_cache

@@ -5,4 +5,43 @@
 <section class="panel"><div class="section-title"><div><p class="eyebrow">آرشیو تو</p><h2>نمونه‌کارها</h2></div><a class="button small" href="{% url 'upload' %}">+ افزودن فایل</a></div>
 <div class="media-grid">{% for item in profile.files.all %}<article class="media-card">{% if item.is_video %}<video controls preload="metadata" src="{% url 'media' item.pk %}"></video>{% else %}<img loading="lazy" src="{% url 'media' item.pk %}" alt="{{ item.title }}">{% endif %}<div class="media-caption"><h3>{{ item.title }}</h3><p class="muted">{{ item.size|filesizeformat }}</p><form method="post" action="{% url 'delete-file' item.pk %}">{% csrf_token %}<button class="text-button danger">حذف فایل</button></form></div></article>{% empty %}<div class="empty-state"><span aria-hidden="true">▧</span><h3>اولین نمونه‌کارت را اضافه کن</h3><p>یک تصویر یا ویدئو از تجربه‌های روی صحنه و جلوی دوربین.</p></div>{% endfor %}</div></section>
 <section class="panel"><div class="section-title"><h2>لینک آثار</h2><a href="{% url 'add-link' %}">+ افزودن لینک</a></div>{% for link in profile.links.all %}<div class="link-row"><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.title }} ↗</a><form method="post" action="{% url 'delete-link' link.pk %}">{% csrf_token %}<button class="text-button danger">حذف</button></form></div>{% empty %}<p class="muted">لینک آثار منتشرشده‌ات را اینجا اضافه کن.</p>{% endfor %}</section>
+<section class="panel" aria-labelledby="invitation-heading">
+    <div class="section-title">
+        <div><p class="eyebrow">دعوت از هنرمندان</p><h2 id="invitation-heading">لینک دعوت تو</h2></div>
+        <strong>{{ invite_count }} دعوت</strong>
+    </div>
+    {% if invitation_link_active %}
+        <p class="muted">این لینک برای چند ثبت‌نام قابل استفاده است. دعوت هیچ اشتراک یا فضای اضافه‌ای ایجاد نمی‌کند.</p>
+        <div class="link-row">
+            <input id="invitation-url" type="url" value="{{ invitation_url }}" readonly aria-label="لینک دعوت اختصاصی">
+            <button id="copy-invitation" class="button small" type="button">کپی لینک</button>
+        </div>
+        <p id="invitation-copy-status" class="muted" role="status" aria-live="polite"></p>
+        <script>
+            const invitationInput = document.getElementById('invitation-url');
+            const copyInvitationButton = document.getElementById('copy-invitation');
+            const invitationCopyStatus = document.getElementById('invitation-copy-status');
+            copyInvitationButton.addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(invitationInput.value);
+                    invitationCopyStatus.textContent = 'لینک دعوت کپی شد.';
+                } catch {
+                    invitationInput.focus();
+                    invitationInput.select();
+                    invitationCopyStatus.textContent = 'لینک انتخاب شد؛ آن را کپی کن.';
+                }
+            });
+        </script>
+    {% else %}
+        <p class="notice">لینک دعوت این حساب توسط مدیر غیرفعال شده است.</p>
+    {% endif %}
+    <h3>دعوت‌شدگان</h3>
+    <ul>
+        {% for invitation in invitees %}
+            <li>{{ invitation.invitee_display_name }}</li>
+        {% empty %}
+            <li class="muted">هنوز کسی با لینک تو ثبت‌نام نکرده است.</li>
+        {% endfor %}
+    </ul>
+</section>
 {% endblock %}
