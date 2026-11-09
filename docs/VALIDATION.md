@@ -20,15 +20,21 @@
 
 ## ممیزی MVP دعوتی — ۲۰۲۶-۱۱-۱۰
 
-مبنای کد: `main` در `ab24f0774d91af02528090c225e5bc8a255b2e00`. جزئیات دامنه و شواهد: [گزارش ممیزی MVP](MVP-AUDIT.md). بررسی‌ها با Python 3.14.7 و Django 5.2.19 و مسیرهای موقت `DATA_ROOT` و `PRIVATE_MEDIA_ROOT` بیرون مخزن اجرا شدند؛ پایگاه داده و رسانه معمول پروژه استفاده نشدند.
+مبنای کد: `main` در `ab24f0774d91af02528090c225e5bc8a255b2e00`. تعریف پذیرفته‌شده از PR باز #11 خوانده شد. جزئیات وضعیت هر قابلیت و یافته‌های AUD-001 تا AUD-010 در [گزارش ممیزی MVP](MVP-AUDIT.md) است.
 
-- `manage.py check`: موفق، بدون مسئله.
-- `manage.py makemigrations --check --dry-run`: موفق، بدون تغییر مهاجرت ثبت‌نشده.
-- `manage.py test --verbosity 1`: ۴۳ آزمون موفق.
-- `scripts/concurrency_smoke.py`: موفق؛ از دو بارگذاری هم‌زمان تنها یکی ذخیره شد.
-- `backup_site` و `verify_backup`: موفق روی پایگاه داده و رسانه ساختگی؛ بازیابی در ریشه موقت جدا، `manage.py check` و تطبیق یک پروفایل و فایل ۶۸ بایتی موفق بود.
-- `manage.py check --deploy`: کد خروج صفر؛ هشدارهای `security.W005` و `security.W021` درباره HSTS زیردامنه و preload باقی ماندند.
-- `scripts/browser_smoke.py`: اجرا نشد؛ Playwright نصب نبود. نصب وابستگی‌های `requirements-dev.txt` با خطای pip درباره نبود پشتیبانی SOCKS شکست خورد؛ آزمون واقعی مرورگر و موبایل تأییدنشده است.
-- شناسه پذیرندگی خالی و sandbox روشن بودند؛ پرداخت/ایمیل زنده، سرور، دامنه و مقصد دوم بکاپ آزمایش نشده‌اند.
+محیط: Windows/PowerShell؛ Python 3.14.7 از `.venv` موجود (از نو ساخته نشد)، Django 5.2.19 و Waitress 3.0.2. برای بررسی‌ها از `DATA_ROOT` و `PRIVATE_MEDIA_ROOT` تصادفی و موقت بیرون مخزن، کلید تصادفی موقت، پذیرندگی خالی و sandbox روشن استفاده شد. داده/رسانهٔ معمول پروژه دست‌نخورده ماندند و ریشه‌های موقت پس از اجرا پاک شدند.
 
-این اجرا مستقل از شواهد تاریخی بالای همین فایل است و نباید نتیجه مرورگر یا بازیابی آن بخش تاریخی را به این ممیزی نسبت داد. برای جدول کامل وضعیت قابلیت‌ها و محدودیت‌ها به [گزارش ممیزی](MVP-AUDIT.md) مراجعه شود.
+| فرمان واقعی | نتیجه |
+|---|---|
+| `.\.venv\Scripts\python.exe -m pip check` | خروجی `No broken requirements found.`؛ exit 0 |
+| `.\.venv\Scripts\python.exe manage.py check` | بدون مشکل؛ exit 0 |
+| `.\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run` | `No changes detected`؛ exit 0 |
+| `.\.venv\Scripts\python.exe manage.py test --verbosity 1` | 43 تست، همگی قبول در 3.281 ثانیه؛ exit 0 |
+| `.\.venv\Scripts\python.exe scripts\concurrency_smoke.py` | دو upload همزمان، یکی ذخیره، فایل اضافه‌ای باقی نماند؛ exit 0 |
+| `manage.py backup_site`، `manage.py verify_backup` و restore از داده ساختگی | snapshot دو فایلی تأیید شد؛ DB جدا `check` شد و یک پروفایل/فایل 68 بایتی تطبیق داده شد؛ همه exit 0 |
+| `.\.venv\Scripts\python.exe scripts\browser_smoke.py` | `ModuleNotFoundError: No module named 'playwright'`؛ exit 1، مرورگر شروع نشد |
+| `manage.py check --deploy` با DEBUG خاموش و کلید تصادفی موقت | exit 0؛ فقط `security.W005` و `security.W021` |
+
+علت نصب‌نشدن Playwright 1.64.1: proxyهای محیط با scheme `socks5` بودند و PySocks در `.venv` موجود نبود. `.\.venv\Scripts\python.exe -m pip install --no-input --retries 0 --timeout 8 -r requirements-dev.txt` با proxy فعال خطای `Missing dependencies for SOCKS support` (exit 1) داد. تلاش مستقیم با proxy environment موقتاً حذف‌شده، `.\.venv\Scripts\python.exe -m pip install --no-input --retries 1 --timeout 8 -r requirements-dev.txt`، به timeout HTTPS در `pypi.org/simple/playwright/` (exit 1) رسید. TLS verification غیرفعال نشد. Microsoft Edge محلی موجود بود ولی smoke script پیش از شروع مرورگر به import خطا خورد. فرمان اجرای دوباره پس از فراهم‌شدن دسترسی pip در [گزارش](MVP-AUDIT.md) آمده است.
+
+شناسه پذیرندگی خالی و sandbox روشن صرفاً مقادیر محیط آزمایش بودند. وضعیت VPS، دامنه، سرویس ایمیل، پذیرندگی واقعی و مقصد دوم بکاپ در این ممیزی ارائه یا بررسی نشد؛ پرداخت زنده انجام نشد. بخش تاریخی بالای این فایل حفظ شده و شواهد مرورگر/بازیابی آن به اجرای تازه نسبت داده نمی‌شوند. هیچ معیار تازه‌ای برای تأیید تلفن، تحصیلات/همکاران ساختاریافته، تأیید ایمیل یا استرداد اضافه نشده است.
