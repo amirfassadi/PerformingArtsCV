@@ -1,6 +1,6 @@
 # Google Studio frontend review — 2026-11-10
 
-Status: CHANGES_REQUESTED (FRONTEND-001).
+Historical status of the original Studio delivery: CHANGES_REQUESTED (FRONTEND-001). Update 2026-11-10: resolved and independently accepted in source b51323516406173e1f05ebf1e6ad02714f971f6a; see docs/reports/frontend-mobile-fix.md. The findings below document the pre-fix version.
 
 ## Received and applied
 
