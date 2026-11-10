@@ -1,6 +1,8 @@
 # Issue 7 follow-up — payment recovery and state consistency
 
-Status: READY_FOR_IMPLEMENTATION. Read docs/reports/issue-007-review.md, docs/reports/issue-007.md and docs/PAYMENTS.md first. Continue from the current codex/issue-7-payment-plans local branch in E:/miranco.project/PerformingArtsCV-artistic-review, including coordinator review documents. Preserve existing history and unrelated changes; do not reset or force-push. Do not start from main or revert the accepted frontend/mobile/media work.
+Status: VERIFIED_COMPLETE for the technical correction, source 92fe61fa69fedf91b9f75b460f59b887d3bb1349 (2026-11-10). PAY-001/PAY-002 and the local concurrency evidence gap were independently resolved. Stage 5 overall remains incomplete pending product terms and real sandbox/live verification. See docs/reports/issue-007-review.md acceptance addendum. Instructions below are retained as the original task, not a request to repeat completed work.
+
+Read docs/reports/issue-007-review.md, docs/reports/issue-007.md and docs/PAYMENTS.md first. Continue from the current codex/issue-7-payment-plans local branch in E:/miranco.project/PerformingArtsCV-artistic-review, including coordinator review documents. Preserve existing history and unrelated changes; do not reset or force-push. Do not start from main or revert the accepted frontend/mobile/media work.
 
 ## Required work
 

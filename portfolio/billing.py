@@ -1,6 +1,8 @@
 from datetime import timedelta
+import time
 from django.conf import settings
 from django.db import models, transaction
+from django.db.utils import OperationalError
 from django.db.models import Max
 from django.urls import reverse
 from django.utils import timezone
@@ -29,31 +31,35 @@ def start_payment(user, plan):
 def verify_payment(payment):
     if payment.status == Payment.Status.PAID:
         return payment
-    if payment.status in (Payment.Status.CANCELED, Payment.Status.FAILED):
-        raise GatewayError('این سفارش دیگر قابل تأیید نیست؛ سفارش تازه‌ای ایجاد کنید.')
     if not payment.authority:
-        raise GatewayError('درخواست معتبری برای این پرداخت وجود ندارد.')
+        raise GatewayError('این سفارش شناسهٔ قابل استعلام ندارد؛ سفارش تازه‌ای ایجاد کنید.')
     receipt = Zarinpal(sandbox=payment.sandbox).verify(payment)
-    with transaction.atomic():
-        # Lock the account before reading payment state: also works on SQLite.
-        Profile.objects.filter(user_id=payment.user_id).update(updated_at=models.F('updated_at'))
-        payment = Payment.objects.select_for_update().get(pk=payment.pk)
-        if payment.status == Payment.Status.PAID:
+    for attempt in range(3):
+        try:
+            with transaction.atomic():
+                # Lock the account before reading payment state: also works on SQLite.
+                Profile.objects.filter(user_id=payment.user_id).update(updated_at=models.F('updated_at'))
+                payment = Payment.objects.select_for_update().get(pk=payment.pk)
+                if payment.status == Payment.Status.PAID:
+                    return payment
+                now = timezone.now()
+                latest_end = Entitlement.objects.filter(
+                    user=payment.user, kind=payment.kind, storage_mb=payment.storage_mb,
+                    revoked=False, ends_at__gt=now, is_test=payment.sandbox,
+                ).aggregate(latest=Max('ends_at'))['latest']
+                start = max(now, latest_end) if latest_end else now
+                payment.entitlement = Entitlement.objects.create(
+                    user=payment.user, kind=payment.kind, storage_mb=payment.storage_mb,
+                    starts_at=start, ends_at=start + timedelta(days=payment.duration_days),
+                    is_test=payment.sandbox,
+                    reference=f'zarinpal:{"sandbox" if payment.sandbox else "live"}:{receipt}',
+                )
+                payment.ref_id = receipt
+                payment.status = Payment.Status.PAID
+                payment.verified_at = now
+                payment.save(update_fields=['entitlement', 'ref_id', 'status', 'verified_at'])
             return payment
-        now = timezone.now()
-        latest_end = Entitlement.objects.filter(
-            user=payment.user, kind=payment.kind, storage_mb=payment.storage_mb,
-            revoked=False, ends_at__gt=now, is_test=payment.sandbox,
-        ).aggregate(latest=Max('ends_at'))['latest']
-        start = max(now, latest_end) if latest_end else now
-        payment.entitlement = Entitlement.objects.create(
-            user=payment.user, kind=payment.kind, storage_mb=payment.storage_mb,
-            starts_at=start, ends_at=start + timedelta(days=payment.duration_days),
-            is_test=payment.sandbox,
-            reference=f'zarinpal:{"sandbox" if payment.sandbox else "live"}:{receipt}',
-        )
-        payment.ref_id = receipt
-        payment.status = Payment.Status.PAID
-        payment.verified_at = now
-        payment.save(update_fields=['entitlement', 'ref_id', 'status', 'verified_at'])
-    return payment
+        except OperationalError:
+            if attempt == 2:
+                raise GatewayError('پردازش هم‌زمان پرداخت کامل نشد؛ استعلام مجدد را امتحان کنید.')
+            time.sleep(0.1 * (attempt + 1))

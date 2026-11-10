@@ -1,6 +1,4 @@
 from django.core.management.base import BaseCommand
-from django.db import transaction
-
 from portfolio.billing import verify_payment
 from portfolio.gateway import GatewayError
 from portfolio.models import Payment
@@ -17,9 +15,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        payments = Payment.objects.filter(
-            status__in=(Payment.Status.PENDING, Payment.Status.UNKNOWN),
-        ).order_by('created_at')
+        payments = Payment.objects.exclude(status=Payment.Status.PAID).order_by('created_at')
         count = payments.count()
         if not options['verify']:
             for payment in payments:
@@ -30,15 +26,20 @@ class Command(BaseCommand):
             self.stdout.write(f'{count} unresolved payment(s).')
             return
 
-        verified = failed = 0
+        verified = failed = skipped = 0
         for payment in payments:
+            if not payment.authority:
+                skipped += 1
+                self.stdout.write(self.style.WARNING(f'{payment.pk}: no authority; not sent'))
+                continue
             try:
-                with transaction.atomic():
-                    verify_payment(payment)
+                verify_payment(payment)
             except GatewayError as error:
                 failed += 1
                 self.stdout.write(self.style.WARNING(f'{payment.pk}: {error}'))
             else:
                 verified += 1
                 self.stdout.write(self.style.SUCCESS(f'{payment.pk}: paid'))
-        self.stdout.write(f'Reconciled {verified} payment(s); {failed} still unresolved.')
+        self.stdout.write(
+            f'Reconciled {verified} payment(s); {failed} failed; {skipped} without authority.',
+        )

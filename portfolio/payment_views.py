@@ -48,17 +48,17 @@ def callback(request, pk):
         except GatewayError:
             Payment.objects.filter(
                 pk=payment.pk,
-                status=Payment.Status.PENDING,
+                status__in=(Payment.Status.PENDING, Payment.Status.UNKNOWN, Payment.Status.CANCELED),
             ).update(status=Payment.Status.UNKNOWN)
     elif callback_status == 'NOK':
         Payment.objects.filter(
             pk=payment.pk,
-            status=Payment.Status.PENDING,
-        ).update(status=Payment.Status.CANCELED)
+            status__in=(Payment.Status.PENDING, Payment.Status.UNKNOWN),
+        ).update(status=Payment.Status.UNKNOWN)
     else:
         Payment.objects.filter(
             pk=payment.pk,
-            status=Payment.Status.PENDING,
+            status__in=(Payment.Status.PENDING, Payment.Status.UNKNOWN, Payment.Status.CANCELED),
         ).update(status=Payment.Status.UNKNOWN)
     return redirect('payment-detail', pk=pk)
 

@@ -5,6 +5,7 @@ import json
 import sqlite3
 import struct
 import tempfile
+import threading
 import zlib
 from contextlib import closing
 from datetime import timedelta
@@ -16,8 +17,8 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import IntegrityError, transaction
-from django.test import Client, TestCase, override_settings
+from django.db import IntegrityError, close_old_connections, transaction
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from .access import can_browse, storage_quota, storage_used
@@ -769,16 +770,29 @@ class BillingTests(TestCase):
         self.assertEqual(Entitlement.objects.count(), 1)
         self.assertEqual(self.client.get(reverse('payment-detail', args=[payment.pk])).status_code, 302)
 
-    @patch.object(Zarinpal, 'verify')
-    def test_forged_authority_and_cancelled_callback_do_not_verify(self, verify):
+    @patch.object(Zarinpal, 'verify', return_value='98760')
+    def test_forged_authority_and_nok_callback_remain_recoverable(self, verify):
         payment = self.payment()
         path = reverse('payment-callback', args=[payment.pk])
         self.assertEqual(self.client.get(path, {'Authority': 'forged', 'Status': 'OK'}).status_code, 400)
         self.client.get(path, {'Authority': payment.authority, 'Status': 'NOK'})
-        verify.assert_not_called()
-        self.assertFalse(Entitlement.objects.exists())
         payment.refresh_from_db()
-        self.assertEqual(payment.status, Payment.Status.CANCELED)
+        self.assertEqual(payment.status, Payment.Status.UNKNOWN)
+        self.client.get(path, {'Authority': payment.authority, 'Status': 'OK'})
+        verify.assert_called_once()
+        self.assertEqual(Entitlement.objects.count(), 1)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.PAID)
+
+    @patch.object(Zarinpal, 'verify', return_value='98761')
+    def test_late_nok_never_downgrades_paid_payment(self, verify):
+        payment = self.payment()
+        path = reverse('payment-callback', args=[payment.pk])
+        self.client.get(path, {'Authority': payment.authority, 'Status': 'OK'})
+        self.client.get(path, {'Authority': payment.authority, 'Status': 'NOK'})
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.PAID)
+        self.assertEqual(Entitlement.objects.count(), 1)
 
     @patch.object(Zarinpal, 'verify', side_effect=GatewayError('timeout'))
     def test_success_callback_timeout_marks_payment_unknown_without_grant(self, verify):
@@ -808,12 +822,18 @@ class BillingTests(TestCase):
         self.assertEqual(Entitlement.objects.count(), 1)
         verify.assert_called_once()
 
-    @patch.object(Zarinpal, 'verify')
-    def test_canceled_payment_cannot_be_verified_again(self, verify):
+    def test_canceled_payment_with_authority_can_be_recovered(self):
         payment = self.payment(status=Payment.Status.CANCELED)
-        with self.assertRaisesRegex(GatewayError, 'قابل تأیید نیست'):
+        with patch.object(Zarinpal, 'verify', return_value='98762') as verify:
             verify_payment(payment)
-        verify.assert_not_called()
+        verify.assert_called_once()
+        self.assertEqual(Payment.objects.get(pk=payment.pk).status, Payment.Status.PAID)
+
+    def test_failed_without_authority_has_no_retry_action(self):
+        payment = self.payment(status=Payment.Status.FAILED, authority=None)
+        response = self.client.get(reverse('payment-detail', args=[payment.pk]))
+        self.assertContains(response, 'درخواست پرداخت ناموفق بود')
+        self.assertNotContains(response, reverse('payment-retry', args=[payment.pk]))
 
     @patch.object(Zarinpal, 'verify', side_effect=['123', '124'])
     def test_same_plan_renewal_starts_after_existing_entitlement(self, verify):
@@ -873,6 +893,51 @@ class BillingTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             verify_payment(second)
         self.assertEqual(Entitlement.objects.count(), 1)
+
+
+@override_settings(ZARINPAL_MERCHANT_ID='00000000-0000-0000-0000-000000000000', ZARINPAL_SANDBOX=True)
+class PaymentConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.user = User.objects.create_user('concurrent-payer', password='Strong-password!')
+        Profile.objects.create(user=self.user, display_name='concurrent-payer')
+        self.plan = Plan.objects.create(
+            name='مشاهده هم‌زمان', kind='browse', price_rial=200000, duration_days=30,
+        )
+        self.payment = Payment.objects.create(
+            user=self.user, plan=self.plan, plan_name=self.plan.name, kind='browse',
+            duration_days=30, amount_rial=200000, authority='S' + '9' * 35,
+        )
+
+    @patch.object(Zarinpal, 'verify', return_value='54321')
+    def test_callback_retry_and_reconciliation_contention_grants_once(self, verify):
+        barrier = threading.Barrier(3)
+        errors = []
+
+        def worker():
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                verify_payment(Payment.objects.get(pk=self.payment.pk))
+            except Exception as error:
+                errors.append(error)
+            finally:
+                close_old_connections()
+
+        threads = [threading.Thread(target=worker) for _ in range(3)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, Payment.Status.PAID)
+        self.assertEqual(Entitlement.objects.count(), 1)
+        self.assertEqual(Payment.objects.filter(ref_id='54321').count(), 1)
+        self.assertGreaterEqual(verify.call_count, 1)
 
 class BackupValidationTests(TestCase):
     def test_corrupted_backup_is_rejected(self):

@@ -2,7 +2,7 @@
 
 Reviewed implementation: 6f0cb5f4fca9c73e90634720439a88830172a272 (implementation commit 43cd6fa20db31c17a43d367d8496b0278ca01ca9). Base: ca0fa823fea5a155b4e108a83d31dfdbf1fae331. Date: 2026-11-10.
 
-Disposition: CHANGES_REQUESTED for technical issues, plus separate outstanding product decisions and external live-payment prerequisites. The implementer's BLOCKED report is accurate about missing external verification, but those prerequisites are not the only remaining work. No real payment, credentials, deployment or merge is part of this review.
+Historical disposition for 6f0cb5f: CHANGES_REQUESTED. Update: technical correction 92fe61fa69fedf91b9f75b460f59b887d3bb1349 independently accepted; PAY-001/PAY-002 resolved. Current progress is Stage 5 5/7 = 71.4%, overall 58.9%; see the acceptance addendum below. Product decisions and external sandbox/live-payment prerequisites remain outstanding. The original findings/rubric below are retained as historical evidence.
 
 ## Independent verification
 
@@ -46,3 +46,22 @@ Only completely verified items count; partially implemented items remain open. T
 | Real sandbox then controlled live purchase/receipt reconciliation | No | Merchant/public HTTPS and live exercise unavailable. |
 
 Stage 5: 2/7 = 28.6%. Overall eight equally weighted stages: (4 + 2/7)/8 = 53.6%. First four core stages remain accepted; other future stages have no accepted credit in this calculation. These percentages describe acceptance coverage, not production readiness or time spent. Stage 5 must stay open.
+
+## Acceptance addendum — corrected source 92fe61f
+
+Implementation reviewed: 92fe61fa69fedf91b9f75b460f59b887d3bb1349 (code commit 079885e782112731a6bd57d2e27c591150497a19). Date: 2026-11-10. Worktree was clean at review start. Changes were confined to payment logic/tests/docs and the payment status template; approved homepage/theme/mobile CSS and media/invitation implementation were preserved.
+
+Independent validation:
+
+- All 70 Django tests passed, system check reported no issues, migration check reported no missing migration, and diff whitespace checks passed.
+- Existing full Edge browser smoke passed: invited signup/copy/privacy, profile editing, private image and real recorded H.264 playback (1.7368s, 160x90, readyState 4), link lifecycle, paywall/access/favorites/mobile and backup/restore. This is application-flow coverage, not a real gateway purchase.
+- Repeated the prior PAY-001 sequence with an isolated on-disk SQLite database and mocked positive gateway verification: NOK remains unknown; subsequent OK verifies and creates one grant; owner retry is idempotent; late NOK and malformed callback leave paid unchanged. Verifier called once for that sequence.
+- Ran three distinct actual application entry points simultaneously against one separate order, using separate worker database connections and a barrier inside the mocked gateway response: anonymous callback OK, authenticated owner retry POST, and reconcile_payments --verify. Both HTTP responses were 302, reconciliation completed, no worker errors occurred, final status was paid, and exactly one entitlement and one matching receipt were stored for that order. This supplements the delivered test, which invokes verify_payment from three workers rather than exercising the three wrappers.
+- Previously canceled and failed orders with authority were independently recovered by reconciliation with distinct synthetic receipts. Failed orders without authority rendered no retry URL. No gateway network requests were made.
+- Additional Edge bounds checks for pending/failed/paid/canceled/unknown synthetic receipt pages with authority passed at 1440, 390 and 360 (15 checks); empty dashboard passed at the same widths (3 more). Both document scrollWidth and header/main descendant bounds were inspected. Rendering checks do not demonstrate settlement.
+
+PAY-001 and PAY-002 are resolved in reviewed local behavior. The local concurrent-activation evidence gap is closed for the exercised SQLite scenario. This does not claim exhaustive load, other database engines or provider-side concurrency verification.
+
+Updated original seven-item rubric: items 2 (independent subscriptions), 3 (server amount/snapshot), 4 (payment state handling), 5 (verified/idempotent activation with local concurrency) and 6 (technical reconciliation/support workflow) accepted. Item 1 (approved commercial prices/durations/capacities/upgrade policy) remains unapproved. Item 7 (real sandbox and controlled live purchase with receipt reconciliation) remains unexecuted.
+
+Current Stage 5: 5/7 = 71.4%. Current overall MVP: (4 + 5/7)/8 = 58.9%. Stage 5 and Issue #7 remain incomplete. Payment production readiness is not granted. Technical implementation can be reviewed as ready; no merge, deployment or live transaction has been performed. Next required inputs are product-approved plan terms and an appropriately prepared merchant/public HTTPS callback environment; no credentials belong in repository reports or chat.
