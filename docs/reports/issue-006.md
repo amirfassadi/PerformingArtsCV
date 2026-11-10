@@ -4,57 +4,73 @@
 
 - وضعیت: `READY_FOR_REVIEW`
 - تسک: Issue #6 — مرحلهٔ ۴
-- آخرین به‌روزرسانی: ۲۰۲۶-۱۱-۱۰ ۱۰:۳۸:۲۱ (+۰۳:۳۰)
+- اصلاح بازبینی: PR #15 — تکمیل MEDIA-001 پس از تأیید MEDIA-002
+- آخرین به‌روزرسانی: ۲۰۲۶-۱۱-۱۰ ۱۲:۲۹ (+۰۳:۳۰)
 - مجری: Copilot
 - شاخهٔ محلی: `codex/issue-6-private-media-storage`
-- SHA کد بررسی‌شده (Git tree، پیش از افزودن این گزارش): `870eff9910167cfd78004780022f684c63958aba`
-- commit مبنا: `b3c0beb45568acd87068d8e8967d41c832ac361f`
+- SHA کد مبنای مرحلهٔ ۴: `810b09d3928f7a84de7745235ccd91d1a608d7a7`
+- SHA commit محلی قبلی (MEDIA-002): `55565b968f7f5a45137dce2283505fde9b8160f7`
+- SHA commit محلی کد این اصلاح: `4a5cf08261eed9165ecec2d80d7e901d3068c856`
+- SHA commit محلی آماده‌سازی/تکمیل آزمون: `74bc937baff1765a1fedae6c2ac424db7204c409`
 - مبنای مرحلهٔ ۳: PR #14 باز و ادغام‌نشده است؛ PR، commit محلی مبنا را به‌عنوان منبع نسخهٔ بررسی‌شده معرفی می‌کند. کار روی شاخهٔ تازه از همان commit آغاز شد.
 - وضعیت انتشار: بر عهدهٔ هماهنگ‌کننده؛ این گزارش و تغییرات فقط محلی هستند.
 
-`READY_FOR_REVIEW` فقط آمادگی بازبینی محلی را نشان می‌دهد. push، درخواست احراز هویت، ساخت/به‌روزرسانی PR، ادغام و بستن Issue انجام نشدند. هیچ تغییر دیتابیسی یا مهاجرت به PostgreSQL صورت نگرفت؛ آزمون‌ها از SQLite موقت استفاده کردند.
+`READY_FOR_REVIEW` پس از نصب وابستگی‌های ثبت‌شده و اجرای آزمون کامل و مرورگر واقعی. push، درخواست احراز هویت، ساخت/به‌روزرسانی PR، ادغام و بستن Issue انجام نشدند. هیچ تغییر دیتابیسی یا مهاجرت به PostgreSQL صورت نگرفت؛ آزمون‌ها از SQLite و مسیرهای رسانهٔ موقت استفاده کردند.
 
 ## دامنه و تغییرات
 
-منطق اصلی آپلود خصوصی، سهمیه و کنترل دسترسی در مبنا وجود داشت. مرحلهٔ ۴ با آزمون‌های تکمیلی و ابزار فقط‌خواندنی تشخیص اختلاف فایل/پایگاه‌داده کامل شد:
+منطق اصلی آپلود خصوصی، سهمیه و کنترل دسترسی در مبنا وجود داشت. این اصلاح بازبینی، دو مورد رسانه را تکمیل کرد:
 
-- [audit_portfolio_media.py](../../portfolio/management/commands/audit_portfolio_media.py): بررسی فایل‌های ثبت‌شدهٔ مفقود، فایل‌های بدون رکورد و اختلاف اندازه؛ هر اختلاف با کد خروج غیرصفر اعلام می‌شود و هیچ فایل یا رکوردی تغییر یا حذف نمی‌شود.
-- [tests.py](../../portfolio/tests.py): انواع مجاز، محتوای نامعتبر، سهمیهٔ پیش‌فرض و پنل مدیر، چرخهٔ تصویر/ویدئو/لینک، دسترسی مستقیم، خطای ذخیره، حذف، انقضا، رقابت و سه نوع اختلاف audit را پوشش می‌دهد.
-- [browser_smoke.py](../../scripts/browser_smoke.py): جریان Edge روی محیط موقت برای تصویر، ویدئوی ساختگی، لینک خارجی، نمایش سهمیه، دسترسی/حذف رسانه و بکاپ/بازیابی.
-- [OPERATIONS.md](../OPERATIONS.md): سیاست فرمت/اندازه و شیوهٔ اجرای audit و رسیدگی دستی بدون حذف خودکار.
-- [ARCHITECTURE.md](../ARCHITECTURE.md) و [ROADMAP.md](../ROADMAP.md): ثبت فرمان audit و تکمیل مورد تشخیص رسانهٔ مفقود/بدون رکورد.
+- [media_validation.py](../../portfolio/media_validation.py) و [forms.py](../../portfolio/forms.py): علاوه بر بررسی ساختار، Pillow الزاماً تصاویر را decode و PyAV/FFmpeg یک فریم ویدئو را decode می‌کند؛ نبود ابزار به خطای آشکار می‌انجامد.
+- [tests.py](../../portfolio/tests.py): نمونه‌های خراب WebP و MP4 جدول‌خالی دقیقاً مطابق کامنت PR اضافه شد؛ رد ورودی نبود رکورد، blob و مصرف سهمیه را می‌سنجد.
+- [browser_smoke.py](../../scripts/browser_smoke.py): MP4/H.264 قابل‌پخش قبلی حفظ شد؛ WebP، JPEG و MP4 آزمایشی به‌علاوه WebM ضبط‌شده برای مسیر پذیرش فرم پوشش داده می‌شوند.
+- [requirements.txt](../../requirements.txt) و [OPERATIONS.md](../OPERATIONS.md): نسخه‌های Pillow/PyAV و راه‌اندازی پیش از اجرا مستند شد؛ در زمان آپلود نصب/دانلود انجام نمی‌شود.
 
 ## معیارهای پذیرش و شواهد
 
 | معیار | نتیجه | شاهد آزمون | محدودیت |
 |---|---|---|---|
-| افزودن/حذف تصویر، ویدئو و لینک خارجی با عنوان و نمایش درست | موفق | آزمون [test_upload_stores_private_file_and_accounts_actual_bytes](../../portfolio/tests.py#L418)، [test_video_upload_is_rendered_and_served_as_private_video](../../portfolio/tests.py#L459)، [test_external_work_link_can_be_added_and_removed_without_storage_use](../../portfolio/tests.py#L478) و مرورگر تصویر، ویدئو و ایجاد/حذف لینک را طی کرد. حذف فایل و آزادشدن فضا در [test_owner_delete_frees_space_and_removes_blob](../../portfolio/tests.py#L598) بررسی شد. | فایل ویدئویی آزمون فقط امضای MP4 ساختگی دارد؛ رمزگشایی/پخش یک ویدئوی کامل در مرورگر ارزیابی نشد. |
-| نمایش مصرف و سقف؛ سهمیهٔ رایگان ۱۰۰ مگابایت و تنظیم مدیر | موفق | آزمون آپلود مقدارهای `quota_mb=100` و مصرف واقعی بر حسب بایت را بررسی می‌کند؛ [test_staff_can_change_quota_from_admin](../../portfolio/tests.py#L651) تنظیم مدیر را بررسی می‌کند. مرورگر «۱۰۰ مگابایت» را در داشبورد دید. | تنظیمات واقعی سرور/حساب مدیر عملیاتی بررسی نشدند. |
-| نوع، اندازه و محتوای فایل؛ ثبت انواع مجاز و رفتار فایل نامعتبر | موفق | [test_allowed_file_signatures_and_rejected_extension_mismatch](../../portfolio/tests.py#L430) امضای JPG/JPEG/PNG/WebP/MP4/WebM و پسوند نامنطبق را آزمود؛ [test_fake_image_and_html_rejected](../../portfolio/tests.py#L555) و [test_streaming_limit_rejects_large_upload](../../portfolio/tests.py#L550) محتوای نامعتبر و سقف جریان را آزمودند. فایل/رکورد اضافی پس از رد ورودی باقی نماند. سیاست و محدودیت در [OPERATIONS.md](../OPERATIONS.md#L50) ثبت شده است. | بررسی محتوا مبتنی بر پسوند و امضای ابتدایی است، نه رمزگشایی کامل، اسکن بدافزار یا تبدیل فایل. سقف `MAX_UPLOAD_BYTES` اندازهٔ کل درخواست multipart، شامل سربار فرم، را محدود می‌کند. |
-| مجوز در هر درخواست و جلوگیری از مسیر عمومی فایل | موفق | [test_file_authorization_and_byte_ranges](../../portfolio/tests.py#L569) مهمان، حساب رایگان، مشترک مجاز، لغو اشتراک و درخواست Range را روی endpoint بررسی کرد؛ مسیرهای `/media/` و `/never-public/` 404 هستند. مرورگر پاسخ سرور URL مستقیم را قبل/بعد از مجوز بررسی کرد. | بررسی روی filesystem محلی و مسیرهای برنامه بود؛ پیکربندی وب‌سرور زنده یا دامنهٔ عمومی تغییر/آزموده نشد. |
-| سهمیه در بارگذاری هم‌زمان، آزادشدن فضا و عدم مصرف توسط لینک خارجی | موفق | [test_external_work_links_do_not_consume_storage](../../portfolio/tests.py#L455)، آزمون حذف فایل و [concurrency_smoke.py](../../scripts/concurrency_smoke.py) شواهد را فراهم می‌کنند؛ smoke هم‌زمان روی SQLite فایل‌محور یک آپلود موفق و یک رد سهمیه داشت و فایل اضافه نماند. | رقابت با دو درخواست هم‌زمان سنجیده شد، نه آزمون فشار یا ظرفیت بالا. |
-| حفظ فایل پس از کاهش سهمیه/انقضای اشتراک و توقف آپلود تازه پس از عبور از سقف | موفق | [test_lowering_quota_keeps_files_readable](../../portfolio/tests.py#L607) و [test_storage_entitlement_expiry_keeps_existing_files_and_blocks_new_ones](../../portfolio/tests.py#L616) فایل قبلی را حفظ و دسترسی مالک را نگه می‌دارند، اما بارگذاری جدید با سهمیهٔ صفر رد می‌شود. | زمان انقضا با timestampهای ساختگی آزموده شد؛ انتظار واقعی یا سرویس اشتراک زنده دخیل نبود. |
-| تشخیص فایل مفقود/بدون رکورد و رسیدگی بدون حذف خودکار | موفق | [test_media_audit_reports_missing_untracked_and_size_mismatch_without_deleting](../../portfolio/tests.py#L495) هر سه اختلاف را ساختگی ایجاد کرد و باقی‌ماندن فایل orphan، رکوردها و blob سالم را تأیید کرد؛ حالت پاک و storage root ایجادنشده نیز آزموده شدند. فرمان فقط‌خواندنی در [audit_portfolio_media.py](../../portfolio/management/commands/audit_portfolio_media.py#L10) و دستورالعمل رسیدگی دستی در [OPERATIONS.md](../OPERATIONS.md#L50) مستند است. | audit یک snapshot لحظه‌ای است؛ نوشتن هم‌زمان می‌تواند اختلاف گذرا نشان دهد. فرمان به backend ذخیره‌سازی دارای قابلیت فهرست‌کردن فایل‌ها نیاز دارد و اختلاف‌ها را خودکار ترمیم نمی‌کند. |
+| افزودن/حذف تصویر، ویدئو و لینک خارجی با عنوان و نمایش درست | موفق | [test_upload_stores_private_file_and_accounts_actual_bytes](../../portfolio/tests.py#L436)، [test_external_work_link_can_be_added_and_removed_without_storage_use](../../portfolio/tests.py#L489) و اجرای مرورگر روی SQLite/media موقت: PNG/JPEG/WebP آزمایشی رمزگشایی شد؛ MP4 آزمایشی ضبط، آپلود و از مسیر خصوصی پخش شد. حذف فایل در [test_owner_delete_frees_space_and_removes_blob](../../portfolio/tests.py#L610) بررسی شد. | پخش واقعی با MP4/H.264 در مرورگر داخلی Chromium سنجیده شد؛ پخش WebM در این محیط تأیید نشد. |
+| نمایش مصرف و سقف؛ سهمیهٔ رایگان ۱۰۰ مگابایت و تنظیم مدیر | موفق در مرحلهٔ پایه | آزمون آپلود مقدارهای `quota_mb=100` و مصرف واقعی بر حسب بایت را بررسی می‌کند؛ [test_staff_can_change_quota_from_admin](../../portfolio/tests.py#L663) تنظیم مدیر را بررسی می‌کند. | در اصلاح PR #15 دوباره اجرا نشد؛ تغییرات سهمیه در این اصلاح نبودند. تنظیمات واقعی سرور/حساب مدیر عملیاتی بررسی نشدند. |
+| نوع، اندازه و محتوای فایل؛ ثبت انواع مجاز و رفتار فایل نامعتبر | موفق | [test_rejects_truncated_and_malformed_media_without_saving](../../portfolio/tests.py#L472) نمونهٔ ۳۰ بایتی `invalid.webp` و MP4 صدوسی‌وسه‌بایتی با جدول‌های خالی را رد کرد و نبود رکورد/blob/مصرف سهمیه را سنجید؛ decode واقعی Pillow/PyAV برای رسانهٔ سالم نیز در suite و smoke اجرا شد. نسخه‌ها در `requirements.txt` پین شده‌اند؛ سقف درخواست multipart و decode فریم محدود باقی می‌ماند. |
+| مجوز در هر درخواست و جلوگیری از مسیر عمومی فایل | موفق در مرحلهٔ پایه | [test_file_authorization_and_byte_ranges](../../portfolio/tests.py#L581) مهمان، حساب رایگان، مشترک مجاز، لغو اشتراک و Range را بررسی کرد؛ مسیرهای `/media/` و `/never-public/` 404 هستند. | در اصلاح PR #15 دوباره اجرا نشد؛ endpoint دسترسی تغییری نکرد. وب‌سرور زنده آزموده نشد. |
+| سهمیه در بارگذاری هم‌زمان، آزادشدن فضا و عدم مصرف توسط لینک خارجی | موفق در مرحلهٔ پایه | [test_external_work_links_do_not_consume_storage](../../portfolio/tests.py#L463)، آزمون حذف و گزارش smoke پیشین [concurrency_smoke.py](../../scripts/concurrency_smoke.py). | concurrency smoke پس از اصلاح رسانه دوباره اجرا نشد؛ ظرفیت بالا آزموده نشده است. |
+| حفظ فایل پس از کاهش سهمیه/انقضای اشتراک و توقف آپلود تازه پس از عبور از سقف | موفق در مرحلهٔ پایه | [test_lowering_quota_keeps_files_readable](../../portfolio/tests.py#L619) و [test_storage_entitlement_expiry_keeps_existing_files_and_blocks_new_ones](../../portfolio/tests.py#L628). | در اصلاح PR #15 دوباره اجرا نشد؛ تاریخ‌ها ساختگی‌اند و سرویس اشتراک زنده دخیل نیست. |
+| تشخیص فایل مفقود/بدون رکورد و رسیدگی بدون حذف خودکار | موفق در مرحلهٔ پایه | [test_media_audit_reports_missing_untracked_and_size_mismatch_without_deleting](../../portfolio/tests.py#L506) و [audit_portfolio_media.py](../../portfolio/management/commands/audit_portfolio_media.py). اجرای audit پاک روی SQLite/media موقت نیز موفق بود. | audit لحظه‌ای و فقط‌خواندنی است؛ فایل را خودکار ترمیم/حذف نمی‌کند. |
+
+### اصلاحات PR #15
+
+| مورد | نتیجه | شاهد | محدودیت |
+|---|---|---|---|
+| MEDIA-001 — فایل WebP بی‌داده و MP4 با جدول‌های خالی | تأیید شد | WebP ناقص و MP4 با جدول‌های خالی رد شدند؛ MP4 چندبخشیِ سالمِ ضبط‌شده توسط Edge پس از اصلاح تشخیص ساختار `mvex/moof` با PyAV یک فریم decode کرد. آزمون منفی endpoint نبود رکورد/blob/مصرف سهمیه را کنترل کرد. |
+| MEDIA-002 — پخش واقعی MP4 | تأییدشده و حفظ شد | آخرین کامنت PR #15 تأیید می‌کند هماهنگ‌کننده کل `browser_smoke.py` را با Playwright و Edge واقعی اجرا کرده و MP4/H.264 با ابعاد 160×90، مدت حدود 1.74s، `readyState=4` و پیشرفت زمان پخش شده است. این اصلاح به کد پخش دست نمی‌زند. | اجرای دوبارهٔ Edge برای commit حاضر به‌دلیل نبود Playwright و decoderهای لازم انجام نشده است. |
 
 **معیار کلی تسک — دور نزدن مجوز یا سهمیه، باقی‌نماندن فایل اضافی پس از بارگذاری ناموفق و حذف‌نشدن خودکار فایل‌های پیشین در انقضا: موفق.** شواهد ردیف‌های بالا و آزمون‌های خطای سهمیه، خطای ذخیرهٔ دیتابیس، کنترل URL مستقیم و انقضای اشتراک این معیار را پوشش می‌دهند.
 
 ## اعتبارسنجی
 
-همهٔ بررسی‌ها با حساب‌ها و فایل‌های ساختگی انجام شدند. آزمون‌های Django و بررسی‌های دستی Django در `DATA_ROOT` و `PRIVATE_MEDIA_ROOT` یکتای زیر مسیر موقت اجرا شدند؛ smoke مرورگر و رقابت سهمیه نیز workspace و SQLite موقت خود را ساختند و پاک کردند. از دیتابیس، رسانه یا حساب واقعی استفاده نشد.
+همهٔ بررسی‌های این اصلاح با حساب‌ها و فایل‌های ساختگی انجام شدند. آزمون‌های Django و audit در `DATA_ROOT` و `PRIVATE_MEDIA_ROOT` یکتای زیر مسیر موقت اجرا شدند. بررسی تصویری/ویدئویی مرورگر نیز از SQLite و رسانهٔ موقت استفاده کرد. از دیتابیس، رسانه یا حساب واقعی استفاده نشد.
 
 | فرمان/بررسی | نتیجه | کد خروج |
 |---|---|---:|
+| دو آزمون هدفمند Django برای نمونه‌های خراب و خطای وابستگی تصویر | هر دو موفق؛ آزمون‌ها از SQLite و فایل‌های ساختگی/مسیر موقت استفاده کردند | ۰ |
 | `python manage.py check` | بدون خطای Django | ۰ |
 | `python manage.py makemigrations --check --dry-run` | migration جاافتاده نبود؛ موتور و migrationهای SQLite تغییر نکردند | ۰ |
-| `python manage.py test` | هر ۶۳ آزمون موفق | ۰ |
-| `python manage.py audit_portfolio_media` با DB و مسیر رسانهٔ موقت و خالی | بدون اختلاف؛ داده‌ای تغییر نکرد | ۰ |
-| `python scripts/concurrency_smoke.py` | دو آپلود هم‌زمان از سهمیه عبور نکردند؛ فایل اضافه باقی نماند | ۰ |
-| `python scripts/browser_smoke.py` | موفق: Edge، تصویر و ویدئوی ساختگی خصوصی، لینک خارجی، سهمیه، محدودیت دسترسی، حذف فایل، موبایل و backup/restore | ۰ |
-| `python -m py_compile portfolio\management\commands\audit_portfolio_media.py portfolio\tests.py scripts\browser_smoke.py` | نحو فایل‌های تغییرکرده معتبر | ۰ |
+| `python -m py_compile portfolio\media_validation.py portfolio\forms.py portfolio\tests.py scripts\browser_smoke.py` | نحو فایل‌های تغییرکرده معتبر | ۰ |
 | `git diff --check` | خطای whitespace نداشت | ۰ |
+| `python manage.py test` کامل | برای این اصلاح اجرا نشد | — |
+| نصب اولیه `python -m pip install -r requirements-dev.txt` با مفسر `.venv\Scripts\python.exe` | شکست؛ کد خروج ۱، خطای پاک‌سازی‌شده `Missing dependencies for SOCKS support`؛ متغیرهای `HTTP_PROXY`/`HTTPS_PROXY` روی `socks5://127.0.0.1:1081` بودند و PySocks نصب نبود | ۱ |
+| تلاش مستقیم بدون proxy برای همان فرمان | شکست؛ کد خروج ۱، `ConnectionResetError(10054)` و سپس `No matching distribution found for Pillow==13.0.0`؛ wheel ویندوز/CPython 3.14 برای pin اولیه موجود نبود | ۱ |
+| آماده‌سازی wheelهای سازگار در `.venv` | موفق؛ Pillow 12.3.0، PyAV 18.1.0، Playwright 1.64.1 و وابستگی‌های `pyee`/`greenlet`/`typing-extensions` نصب شدند؛ PyAV wheel، FFmpeg را همراه دارد | ۰ |
+| `python manage.py test` | هر ۶۴ آزمون موفق | ۰ |
+| `python scripts/browser_smoke.py` | موفق با Edge واقعی؛ H.264 ضبط‌شده و پخش‌شده: مدت `1.7418s`، ابعاد `160×90`، `readyState=4` و پیشرفت `0.2204s`؛ مسیرهای موقت و دادهٔ ساختگی | ۰ |
+| decode مستقیم WebP و MP4 سالم | موفق؛ Pillow WebP را decode کرد و PyAV MP4 مرورگر را `video/mp4` پذیرفت | ۰ |
+| `python manage.py check` و `makemigrations --check --dry-run` | بدون خطا و بدون migration جدید | ۰ |
+| `python -m py_compile ...` و `git diff --check` | موفق | ۰ |
+| `python scripts/concurrency_smoke.py` | در اعتبارسنجی پایهٔ مرحلهٔ ۴ موفق بود؛ پس از اصلاح رسانه دوباره اجرا نشد | پیشین |
 
 ## موارد اجرا‌نشده و موانع
 
-- بررسی provider ابری، دیسک/وب‌سرور زنده، اسکن ضدبدافزار، رمزگشایی واقعی ویدئو، آزمون فشار و بازیابی فایل گمشده از بکاپ واقعی اجرا نشدند؛ این موارد خارج از محیط ساختگی/مسیر موقت یا محدودیت نسخهٔ فعلی‌اند.
+- پخش WebM، provider ابری، دیسک/وب‌سرور زنده، اسکن ضدبدافزار، آزمون فشار و بازیابی فایل گمشده از بکاپ واقعی اجرا نشدند. browser smoke Edge و decode سالم این revision اجرا شدند.
 - audit فقط اختلاف را گزارش می‌کند؛ هیچ حذف، بازپیوند یا اصلاح اندازه‌ای انجام نمی‌دهد. رسیدگی واقعی باید پس از snapshot و بازبینی انسانی طبق [راهنمای عملیات](../OPERATIONS.md#L50) انجام شود.
-- مانع پیاده‌سازی باقی نمانده است. بازبینی مستقل و انتشار بر عهدهٔ هماهنگ‌کننده است.
+- مانع اجرایی باقی نمانده است. pinهای وابستگی برای wheel سازگار با Python 3.14/Windows اصلاح و در محیط نصب شدند؛ بازبینی مستقل و انتشار بر عهدهٔ هماهنگ‌کننده است.
