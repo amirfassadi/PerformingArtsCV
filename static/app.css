@@ -1640,3 +1640,719 @@ input:focus, select:focus, textarea:focus {
 .invitation-panel input { background: var(--bg-charcoal); border: 1px solid var(--bg-border-light); color: var(--text-primary); padding: .75rem; border-radius: var(--radius-sm); font: inherit; }
 :focus-visible { outline: 2px solid var(--gold-accent); outline-offset: 4px; }
 @media(max-width: 640px) { .invitation-panel .link-row { flex-direction: column; align-items: stretch; } }
+
+/* ==========================================================================
+   تکمیل استایل‌های هماهنگ با هویت زغالی، قرمز و طلایی «درباره‌ی من»
+   (Harmonized Artistic UI Extensions & Browser Control Overrides)
+   ========================================================================== */
+
+/* ریست و هماهنگ‌سازی کنترل‌های پیش‌فرض مرورگر */
+button {
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+/* اصلاح دکمه‌های حذف در داشبورد، مدیریت فایل‌ها و پیوندها */
+.delete-link-btn,
+.text-button.danger {
+    background-color: rgba(185, 28, 28, 0.12) !important;
+    color: #f87171 !important;
+    border: 1px solid rgba(185, 28, 28, 0.35) !important;
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.delete-link-btn:hover,
+.text-button.danger:hover {
+    background-color: var(--color-crimson) !important;
+    border-color: var(--color-crimson-hover) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 10px rgba(185, 28, 28, 0.45);
+}
+
+.delete-link-btn:active,
+.text-button.danger:active {
+    transform: scale(0.97);
+}
+
+.delete-link-btn:focus-visible,
+.text-button.danger:focus-visible {
+    outline: 2px solid var(--gold-accent);
+    outline-offset: 2px;
+}
+
+/* مدیریت فایل‌ها و نمونه‌کارها در داشبورد */
+.media-manage-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+}
+
+.media-card-body {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background-color: var(--bg-surface-elevated);
+}
+
+.file-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--bg-border);
+}
+
+.file-size-tag {
+    font-size: 11px;
+    color: var(--text-muted);
+    background-color: var(--bg-surface);
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--bg-border);
+    direction: ltr;
+    font-family: monospace, sans-serif;
+}
+
+/* مدیریت پیوندها در وب */
+.links-manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.link-manage-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background-color: var(--bg-surface-elevated);
+    border: 1px solid var(--bg-border);
+    padding: 12px 18px;
+    border-radius: var(--radius-sm);
+    transition: border-color 0.2s ease;
+}
+
+.link-manage-row:hover {
+    border-color: var(--bg-border-light);
+}
+
+.link-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+}
+
+.link-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+}
+
+.link-url-display {
+    font-size: 12px;
+    color: var(--color-crimson);
+    direction: ltr;
+    text-align: left;
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 0.2s ease;
+}
+
+.link-url-display:hover {
+    color: var(--color-crimson-hover);
+    text-decoration: underline;
+}
+
+.muted-note {
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+/* پنل سیستم دعوت با رنگ‌های زغالی، قرمز و طلایی */
+.invitation-panel {
+    border-color: rgba(212, 175, 55, 0.35);
+    background: linear-gradient(180deg, var(--bg-surface) 0%, rgba(20, 22, 24, 0.96) 100%);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.invitation-panel .section-title {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--bg-border);
+}
+
+.invitation-panel h2 {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.invitation-panel .eyebrow {
+    color: var(--gold-accent);
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+    letter-spacing: 0.5px;
+}
+
+.invitation-panel .muted {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0.75rem 0;
+    line-height: 1.65;
+}
+
+.invitation-panel .link-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.invitation-panel .link-row input,
+#invitation-url {
+    min-width: 0;
+    width: 100%;
+    direction: ltr;
+    text-align: left;
+    background-color: var(--bg-charcoal);
+    border: 1px solid var(--bg-border-light);
+    color: var(--text-primary);
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 13px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.invitation-panel .link-row input:focus,
+#invitation-url:focus {
+    border-color: var(--gold-accent);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
+    outline: none;
+}
+
+.invitation-panel .button,
+#copy-invitation {
+    background-color: var(--color-crimson);
+    color: #ffffff;
+    border: 1px solid var(--color-crimson);
+    border-radius: var(--radius-sm);
+    padding: 0.65rem 1.25rem;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.invitation-panel .button:hover,
+#copy-invitation:hover {
+    background-color: var(--color-crimson-hover);
+    border-color: var(--color-crimson-hover);
+    box-shadow: 0 4px 14px rgba(185, 28, 28, 0.45);
+}
+
+.invitation-panel .button:active,
+#copy-invitation:active {
+    transform: scale(0.98);
+}
+
+#invitation-copy-status {
+    font-size: 12px;
+    color: #4ade80;
+    margin-top: 6px;
+    min-height: 18px;
+    font-weight: 500;
+}
+
+.invitation-panel h3 {
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.invitation-panel ul {
+    padding-inline-start: 1.25rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+.invitation-panel ul li {
+    padding: 4px 0;
+}
+
+/* استایل فرم‌های جنگو و لیست خطاها */
+.standard-django-form,
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.standard-django-form p,
+.auth-form p {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.standard-django-form label,
+.auth-form label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.errorlist {
+    list-style: none;
+    padding: 8px 14px;
+    margin: 4px 0 10px;
+    background-color: rgba(185, 28, 28, 0.15);
+    border: 1px solid rgba(185, 28, 28, 0.4);
+    border-radius: var(--radius-sm);
+    color: #fca5a5;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.errorlist li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.errorlist li::before {
+    content: "⚠";
+    color: var(--color-crimson);
+}
+
+/* کنترل‌های بومی ورودی فایل، سلکت و چک‌باکس */
+input[type="file"] {
+    background-color: var(--bg-surface-elevated);
+    border: 1px dashed var(--bg-border-light);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    width: 100%;
+}
+
+input[type="file"]::file-selector-button {
+    background: var(--bg-surface-card);
+    border: 1px solid var(--bg-border-light);
+    color: var(--text-primary);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-inline-end: 12px;
+    transition: all 0.2s ease;
+}
+
+input[type="file"]::file-selector-button:hover {
+    background: var(--color-crimson);
+    border-color: var(--color-crimson);
+    color: #ffffff;
+}
+
+select {
+    background-color: var(--bg-charcoal);
+    color: var(--text-primary);
+    border: 1px solid var(--bg-border-light);
+}
+
+select option {
+    background-color: var(--bg-surface-card);
+    color: var(--text-primary);
+}
+
+input[type="checkbox"] {
+    accent-color: var(--color-crimson);
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* فیلتر و جست‌وجوی کشف هنرمندان */
+.custom-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.empty-directory-card {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+.empty-icon-large {
+    font-size: 48px;
+    color: var(--color-crimson);
+    margin-bottom: 6px;
+}
+
+.empty-directory-card h2 {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.empty-directory-card p {
+    color: var(--text-muted);
+    font-size: 14px;
+    max-width: 520px;
+    line-height: 1.8;
+}
+
+/* پلن‌ها، فاکتور و رسید تراکنش */
+.important-notice-box {
+    background-color: rgba(212, 175, 55, 0.08);
+    border: 1px solid rgba(212, 175, 55, 0.28);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+
+.important-notice-box strong {
+    color: var(--gold-accent);
+}
+
+.important-notice-box small {
+    display: block;
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.payment-status-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 16px;
+    margin: 20px 0 24px;
+    background-color: var(--bg-surface-elevated);
+    border: 1px solid var(--bg-border);
+    border-radius: var(--radius-sm);
+    text-align: center;
+}
+
+.payment-status-header.status-paid {
+    border-color: rgba(74, 222, 128, 0.4);
+    background-color: rgba(34, 197, 94, 0.08);
+}
+
+.payment-status-header.status-pending,
+.payment-status-header.status-failed {
+    border-color: rgba(239, 68, 68, 0.4);
+    background-color: rgba(185, 28, 28, 0.08);
+}
+
+.status-symbol {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.payment-status-header.status-paid .status-symbol {
+    background-color: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+    border: 2px solid #4ade80;
+}
+
+.payment-status-header.status-pending .status-symbol,
+.payment-status-header.status-failed .status-symbol {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    border: 2px solid #ef4444;
+}
+
+.status-title {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.summary-divider {
+    border: 0;
+    border-top: 1px solid var(--bg-border);
+    margin: 12px 0;
+}
+
+.total-line {
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.total-val {
+    color: var(--gold-accent);
+    font-size: 20px;
+}
+
+.bold-val {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.code-font {
+    font-family: monospace, sans-serif;
+    letter-spacing: 0.5px;
+    direction: ltr;
+}
+
+.card-footer-links,
+.auth-footer-note {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--bg-border);
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-decoration: none;
+    margin-bottom: 16px;
+    transition: color 0.2s ease;
+}
+
+.back-link:hover {
+    color: var(--color-crimson);
+}
+
+.payment-history-section {
+    margin-top: 36px;
+}
+
+.payment-records-table {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.payment-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 18px;
+    background-color: var(--bg-surface-elevated);
+    border: 1px solid var(--bg-border);
+    border-radius: var(--radius-sm);
+    flex-wrap: wrap;
+    transition: border-color 0.2s ease;
+}
+
+.payment-row:hover {
+    border-color: var(--bg-border-light);
+}
+
+.pay-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sandbox-tag {
+    font-size: 11px;
+    background-color: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.pay-amount {
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.pay-status {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+.pay-status.status-paid {
+    background-color: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.pay-status.status-pending,
+.pay-status.status-failed {
+    background-color: rgba(234, 179, 8, 0.15);
+    color: #facc15;
+    border: 1px solid rgba(250, 204, 21, 0.3);
+}
+
+.pay-action .text-link {
+    font-size: 13px;
+    color: var(--color-crimson);
+}
+
+.pay-action .text-link:hover {
+    color: var(--color-crimson-hover);
+}
+
+/* ==========================================================================
+   قواعد تکمیلی واکنش‌گرایی برای موبایل (Mobile 390px / 360px)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .media-manage-grid {
+        grid-template-columns: 1fr;
+    }
+    .link-manage-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    .payment-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    .banner-inner {
+        flex-direction: column;
+        align-items: stretch;
+        text-align: center;
+        gap: 20px;
+    }
+    .banner-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 640px) {
+    .container {
+        padding: 24px 16px 60px;
+    }
+    .banner-stage {
+        padding: 24px 18px;
+    }
+    .invitation-panel .link-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .invitation-panel .link-row .button,
+    #copy-invitation {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .hero-headline {
+        font-size: 26px;
+        line-height: 1.35;
+    }
+    .hero-cta-group {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    .hero-cta-group .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .hero-perks {
+        flex-direction: column;
+        gap: 8px;
+    }
+    .dashboard-head {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+    }
+    .dashboard-head .head-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .profile-title-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 14px;
+    }
+    .profile-header-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .search-btn-group .btn {
+        width: 100%;
+    }
+    .locked-actions-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    .locked-actions-row .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
