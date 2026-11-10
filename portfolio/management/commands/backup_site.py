@@ -37,9 +37,16 @@ class Command(BaseCommand):
             # Hold SQLite's writer reservation while copying referenced media.
             SiteSettings.objects.filter(pk=1).update(free_storage_mb=F('free_storage_mb'))
             db_target = destination / 'db.sqlite3'
-            with closing(sqlite3.connect(str(connection.settings_dict['NAME']))) as source:
-                with closing(sqlite3.connect(db_target)) as target:
-                    source.backup(target)
+            source = connection.connection
+            if source is None:
+                raise CommandError('SQLite connection is not available for backup.')
+            database_name = str(connection.settings_dict['NAME'])
+            if database_name == ':memory:' or database_name.startswith('file:'):
+                db_target.write_bytes(source.serialize())
+            else:
+                with closing(sqlite3.connect(database_name)) as source_file:
+                    with closing(sqlite3.connect(db_target)) as target:
+                        source_file.backup(target)
             entries.append({'path': 'db.sqlite3', 'sha256': digest(db_target)})
             for item in PortfolioFile.objects.all().iterator():
                 original = (media_root / item.file.name).resolve()

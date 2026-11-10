@@ -1,0 +1,23 @@
+# Replace example.test only after the owner chooses a domain.
+example.test {
+    encode gzip
+    request_body {
+        max_size 205MB
+    }
+    handle_path /static/* {
+        root * /srv/performingartscv/staticfiles
+        file_server
+    }
+    handle {
+        reverse_proxy 127.0.0.1:8000 {
+            # Never pass a client-supplied forwarding chain to Waitress.
+            header_up -X-Forwarded-For
+            header_up X-Forwarded-For {remote_host}
+            header_up -X-Forwarded-Proto
+            header_up X-Forwarded-Proto {scheme}
+            header_up -Forwarded
+        }
+    }
+}
+
+# Do not add a route for /srv/performingartscv/private-media.
