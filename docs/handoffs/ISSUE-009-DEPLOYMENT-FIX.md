@@ -1,6 +1,10 @@
 # Issue 9 follow-up — proxy identity and operational preparation
 
-Status: READY_FOR_IMPLEMENTATION. Read docs/reports/issue-009-review.md, docs/reports/issue-009.md and docs/OPERATIONS.md first.
+Status: FOLLOW_UP_REQUIRED after source 40c986f0a9d13a17d4c718ef7267a505268dfbb2. Read the latest follow-up in docs/reports/issue-009-review.md first. DEPLOY-001 remains open because repeated --trusted-proxy-headers CLI options overwrite each other; the Python-keyword smoke does not exercise that command. The original broader instructions below remain as background, not a request to repeat completed backup/workload preparation.
+
+Immediate correction: make the service ExecStart and every documented proxy startup command supply both trusted header names in a single correctly quoted option value supported by pinned Waitress 3.0.2. Parse and launch the actual service command options in a regression/integration check, substituting only interpreter/application fixture/temporary port as necessary. Confirm that both header names survive parsing, distinct forwarded clients reach distinct REMOTE_ADDR values, HTTPS scheme survives, same-client quota is shared across real Django login/admin, and spoofing/untrusted peers remain rejected. A 200 homepage workload alone is not proof of identity or throttling. Do not hardcode a separate known-good kwargs dictionary in the only test, and do not weaken peer trust or expose the listener. Use isolated synthetic data only. Keep the fixed report path and local-commit-only delivery rules below.
+
+Read docs/reports/issue-009.md and docs/OPERATIONS.md as well.
 
 Continue in E:/miranco.project/PerformingArtsCV-artistic-review on codex/issue-9-deployment-backup. Current implementation source is 46ce479a404c3979213d1bea60b6945c99639744; preserve the following coordinator review commit as well. Do not reset history or replace approved frontend/media/payment/account work.
 

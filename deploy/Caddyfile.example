@@ -10,7 +10,12 @@ example.test {
     }
     handle {
         reverse_proxy 127.0.0.1:8000 {
+            # Never pass a client-supplied forwarding chain to Waitress.
+            header_up -X-Forwarded-For
+            header_up X-Forwarded-For {remote_host}
+            header_up -X-Forwarded-Proto
             header_up X-Forwarded-Proto {scheme}
+            header_up -Forwarded
         }
     }
 }

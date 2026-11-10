@@ -6,17 +6,26 @@
 
 ## اجرای محلی
 
-راهنمای README را اجرا کن. `runserver` فقط برای توسعه است. برای اجرای سرویس پشت پروکسی می‌توان از Waitress استفاده کرد:
+راهنمای README را اجرا کن. `runserver` فقط برای توسعه است. برای اجرای سرویس پشت Caddy می‌توان از Waitress استفاده کرد. این نمونه فقط وقتی معتبر است که Caddy تنها peer ورودی به loopback باشد:
 
 ```powershell
-.\.venv\Scripts\python.exe -m waitress --listen=127.0.0.1:8000 config.wsgi:application
+.\.venv\Scripts\python.exe -m waitress --listen=127.0.0.1:8000 --trusted-proxy=127.0.0.1 --trusted-proxy-count=1 --trusted-proxy-headers=x-forwarded-for --trusted-proxy-headers=x-forwarded-proto --clear-untrusted-proxy-headers config.wsgi:application
 ```
+
+اجرای مستقیم و غیرپراکسی باید بدون گزینه‌های `--trusted-proxy*` بماند؛ در آن حالت Django فقط
+`REMOTE_ADDR` اتصال را می‌بیند و هدرهای forwarding را نمی‌پذیرد. Waitress در نمونهٔ پراکسی،
+`REMOTE_ADDR` را فقط از `X-Forwarded-For` پاک‌سازی‌شدهٔ Caddy و فقط از peer دقیق
+`127.0.0.1` استخراج می‌کند. `X-Forwarded-Proto` صرفاً scheme/HTTPS را تعیین می‌کند و هویت
+محدودکننده نیست.
 
 در تولید: `DJANGO_DEBUG=0`، کلید تصادفی مخصوص محیط، `DJANGO_ALLOWED_HOSTS` شامل دامنه واقعی و `PUBLIC_BASE_URL` برابر نشانی HTTPS سایت تنظیم شوند. فایل تنظیمات محیط در محل امن سرور قرار بگیرد. حساب پیش‌فرض نداریم؛ مدیر با `createsuperuser` ساخته می‌شود.
 
 ## پروکسی و HTTPS
 
-سرویس برنامه فقط روی loopback گوش دهد. پروکسی باید هدر `X-Forwarded-Proto` را خودش مقداردهی کند و هدر ورودی غیرقابل اعتماد را عبور ندهد. فقط در این چیدمان `TRUST_PROXY_HTTPS=1` تنظیم شود. سرو مستقیم برنامه بدون پروکسی HTTPS با این تنظیم صحیح نیست.
+سرویس برنامه فقط روی loopback گوش دهد. Caddy باید هدرهای `X-Forwarded-For` و
+`X-Forwarded-Proto` را حذف و با مقدارهای خودش جایگزین کند؛ نمونهٔ `deploy/Caddyfile.example`
+همین کار را انجام می‌دهد. فقط در این چیدمان `TRUST_PROXY_HTTPS=1` تنظیم شود. سرو مستقیم
+برنامه بدون پروکسی HTTPS با این تنظیم صحیح نیست.
 
 ابتدا `manage.py collectstatic --noinput` اجرا شود. نمونه اولیه Caddy برای لینوکس، با جایگزینی دامنه و مسیر واقعی:
 
@@ -37,7 +46,25 @@ example.com {
 
 هیچ route یا alias برای پوشه private-media تعریف نشود. فایل‌های خصوصی باید از برنامه و کنترل دسترسی آن عبور کنند. نمونه پروکسی روی سرور واقعی آزمایش نشده است. با تغییر سقف بارگذاری، محدودیت پروکسی و برنامه هماهنگ شوند.
 
-نمونه‌های آمادهٔ استقرار در `deploy/` فقط الگو هستند: Caddy تنها static را مستقیم سرو می‌کند و سرویس Django با کاربر محدود، `Restart=on-failure` و مسیرهای نوشتنی صریح اجرا می‌شود. دامنه، کاربر سرویس، مسیرها و فایل متغیرهای محیط باید توسط مالک انتخاب و خارج از Git ایجاد شوند. `TRUST_PROXY_HTTPS=1` فقط وقتی مجاز است که proxy هدر `X-Forwarded-Proto` و نشانی client را خودش بازنویسی کند؛ تشخیص IP محدودکننده‌ها به هدر دلخواه مرورگر اعتماد نمی‌کند.
+نمونه‌های آمادهٔ استقرار در `deploy/` فقط الگو هستند: Caddy تنها static را مستقیم سرو می‌کند و سرویس Django با کاربر محدود، `Restart=on-failure` و مسیرهای نوشتنی صریح اجرا می‌شود. دامنه، کاربر سرویس، مسیرها و فایل متغیرهای محیط باید توسط مالک انتخاب و خارج از Git ایجاد شوند. `TRUST_PROXY_HTTPS=1` فقط وقتی مجاز است که proxy هدرهای scheme و client را خودش بازنویسی کند و Waitress فقط peer واقعی proxy را trusted بداند؛ تشخیص IP محدودکننده‌ها به هدر دلخواه مرورگر اعتماد نمی‌کند.
+
+آزمون مرز اعتماد محلی:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\waitress_proxy_smoke.py
+```
+
+این آزمون از Waitress نصب‌شده با دو هویت ساختگی، سهمیهٔ مستقل هر هویت، سهمیهٔ مشترک همان
+هویت، زنجیرهٔ forwarding اضافی و peer غیرمجاز استفاده می‌کند. Caddy واقعی یا سرور عمومی در
+این محیط اجرا نمی‌شود؛ سناریوی Caddy با هدرهای بازنویسی‌شدهٔ peer محلی شبیه‌سازی می‌شود.
+
+بار محدود HTTP، جدا از آزمون صحت هم‌زمانی سهمیه، با URL محلی اجرا می‌شود:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\http_workload_smoke.py --url http://127.0.0.1:8000/ --requests 40 --concurrency 4
+```
+
+این فقط شمارش خطا و latency یک محیط توسعه است و ظرفیت production، SLA یا گروه بار نماینده را نتیجه نمی‌دهد.
 
 بررسی تنظیمات قبل از استقرار:
 

@@ -39,3 +39,18 @@ The quota concurrency smoke is useful, but is not an HTTP workload/latency/capac
 Stage 7 = 1/7 = 14.3%. Overall = (4 + 5/7 + 2/6 + 1/7)/8 = 64.9%. Prior stage-5/6 gaps remain open; Issue 9 must remain open and no production-readiness claim is made.
 
 Next task: docs/handoffs/ISSUE-009-DEPLOYMENT-FIX.md. Executor Copilot; preparation and isolated testing only. Publication belongs to the coordinator.
+
+## Follow-up review — 40c986f (DEPLOY-001 still open)
+
+Reviewed correction source: 40c986f0a9d13a17d4c718ef7267a505268dfbb2, code correction 7a5cd6e8bdda2a372a534eb299272d314c5c1aec. All 84 tests independently passed. scripts/waitress_proxy_smoke.py also independently passed, but it exercises a toy WSGI app configured via Python keyword arguments, including trusted_proxy_headers={'x-forwarded-for','x-forwarded-proto'}. Its /login/ and /admin/login/ responses use an in-memory Counter, not Django authentication or the persistent RequestThrottle implementation.
+
+The actual service/operations command repeats --trusted-proxy-headers: first x-forwarded-for, then x-forwarded-proto. The installed pinned Waitress 3.0.2 CLI parser overwrites repeated values for this option. Parsing the exact ExecStart options produces trusted_proxy_headers='x-forwarded-proto', losing x-forwarded-for.
+
+Independent live WSGI reproduction with the actual service options (only interpreter, app fixture and temporary listen port substituted) yielded:
+
+- forwarded client 198.51.100.10 -> identity 127.0.0.1, scheme https;
+- forwarded client 203.0.113.20 -> identity 127.0.0.1, scheme https.
+
+Thus the report's claim that the real CLI options were verified does not establish correct client identity. An HTTP root workload returning 200 cannot detect this defect. Fix the CLI to supply both header names as one appropriately quoted option value, and make regression/integration checks consume the actual deployed command configuration rather than a separate Python-only equivalent. Document/sanitize the Caddy side as before; real Caddy was not exercised.
+
+New bounded HTTP workload and documentation are useful local preparation. They do not resolve DEPLOY-001 or establish representative pilot capacity, an installed scheduler, offsite backup or delivered monitoring alerts. No change to the seven-item acceptance rubric: Stage 7 remains 1/7 = 14.3%, overall MVP remains 64.9%. No merge, deployment or production-readiness approval is granted.
