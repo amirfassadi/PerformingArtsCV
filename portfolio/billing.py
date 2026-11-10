@@ -29,6 +29,8 @@ def start_payment(user, plan):
 def verify_payment(payment):
     if payment.status == Payment.Status.PAID:
         return payment
+    if payment.status in (Payment.Status.CANCELED, Payment.Status.FAILED):
+        raise GatewayError('این سفارش دیگر قابل تأیید نیست؛ سفارش تازه‌ای ایجاد کنید.')
     if not payment.authority:
         raise GatewayError('درخواست معتبری برای این پرداخت وجود ندارد.')
     receipt = Zarinpal(sandbox=payment.sandbox).verify(payment)

@@ -758,7 +758,7 @@ class BillingTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Entitlement.objects.exists())
         payment.refresh_from_db()
-        self.assertEqual(payment.status, 'pending')
+        self.assertEqual(payment.status, Payment.Status.UNKNOWN)
 
     @patch.object(Zarinpal, 'verify', return_value='45678')
     def test_callback_does_not_require_session_but_detail_does(self, verify):
@@ -777,6 +777,43 @@ class BillingTests(TestCase):
         self.client.get(path, {'Authority': payment.authority, 'Status': 'NOK'})
         verify.assert_not_called()
         self.assertFalse(Entitlement.objects.exists())
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.CANCELED)
+
+    @patch.object(Zarinpal, 'verify', side_effect=GatewayError('timeout'))
+    def test_success_callback_timeout_marks_payment_unknown_without_grant(self, verify):
+        payment = self.payment()
+        response = self.client.get(
+            reverse('payment-callback', args=[payment.pk]),
+            {'Authority': payment.authority, 'Status': 'OK'},
+        )
+        self.assertRedirects(response, reverse('payment-detail', args=[payment.pk]))
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.UNKNOWN)
+        self.assertFalse(Entitlement.objects.exists())
+        verify.assert_called_once()
+
+    @patch.object(Zarinpal, 'verify', return_value='98765')
+    def test_reconcile_command_lists_and_verifies_unresolved_orders(self, verify):
+        payment = self.payment()
+        payment.status = Payment.Status.UNKNOWN
+        payment.save(update_fields=['status'])
+        output = io.StringIO()
+        call_command('reconcile_payments', stdout=output)
+        self.assertIn(str(payment.pk), output.getvalue())
+        self.assertEqual(Entitlement.objects.count(), 0)
+        call_command('reconcile_payments', '--verify', stdout=output)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.PAID)
+        self.assertEqual(Entitlement.objects.count(), 1)
+        verify.assert_called_once()
+
+    @patch.object(Zarinpal, 'verify')
+    def test_canceled_payment_cannot_be_verified_again(self, verify):
+        payment = self.payment(status=Payment.Status.CANCELED)
+        with self.assertRaisesRegex(GatewayError, 'قابل تأیید نیست'):
+            verify_payment(payment)
+        verify.assert_not_called()
 
     @patch.object(Zarinpal, 'verify', side_effect=['123', '124'])
     def test_same_plan_renewal_starts_after_existing_entitlement(self, verify):
