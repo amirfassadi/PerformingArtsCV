@@ -67,6 +67,14 @@
                 <span class="footer-title">«درباره‌ی من»</span>
                 <span class="footer-desc">سکوی تخصصی نمایش استعداد، رزومه و آرشیو آثار فعالان سینما، تئاتر و هنرهای نمایشی ایران</span>
             </div>
+            <nav class="footer-links" aria-label="راهنما و سیاست‌ها">
+                <a href="{% url 'legal' 'terms' %}">شرایط استفاده (پیش‌نویس)</a>
+                <a href="{% url 'legal' 'privacy' %}">حریم خصوصی (پیش‌نویس)</a>
+                <a href="{% url 'legal' 'content-rules' %}">قواعد محتوا (پیش‌نویس)</a>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'support' %}">درخواست پشتیبانی</a>
+                {% endif %}
+            </nav>
             <div class="footer-meta">
                 <span class="footer-quote">«هر تجربه، پرده‌ای از روایت حرفه‌ای توست.»</span>
                 <span class="footer-links">

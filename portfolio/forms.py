@@ -4,7 +4,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
-from .models import Profile, WorkLink
+from .models import Profile, SupportRequest, WorkLink
 from .media_validation import InvalidMedia, validate_media
 
 class SignupForm(UserCreationForm):
@@ -47,3 +47,10 @@ class UploadForm(forms.Form):
             value.seek(0)
         value.detected_content_type = content_type
         return value
+
+class SupportRequestForm(forms.ModelForm):
+    class Meta:
+        model = SupportRequest
+        fields = ['subject', 'message']
+        labels = {'subject': 'موضوع', 'message': 'شرح درخواست'}
+        widgets = {'message': forms.Textarea(attrs={'rows': 6})}

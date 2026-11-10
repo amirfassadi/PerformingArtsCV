@@ -7,25 +7,28 @@ import struct
 import tempfile
 import threading
 import zlib
+import re
 from contextlib import closing
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.core import mail
 from django.db import IntegrityError, close_old_connections, transaction
-from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from .access import can_browse, storage_quota, storage_used
 from .billing import start_payment, verify_payment
 from .forms import UploadForm
 from .gateway import GatewayError, Zarinpal
-from .models import MB, Entitlement, Favorite, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
+from .models import MB, Entitlement, Favorite, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, RequestThrottle, SiteSettings, SupportRequest, WorkLink
+from .security import rate_limit
 from .media_validation import MediaDecoderUnavailable
 from .services import add_file
 
@@ -938,6 +941,243 @@ class PaymentConcurrencyTests(TransactionTestCase):
         self.assertEqual(Entitlement.objects.count(), 1)
         self.assertEqual(Payment.objects.filter(ref_id='54321').count(), 1)
         self.assertGreaterEqual(verify.call_count, 1)
+
+
+@override_settings(
+    EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+    LOGIN_RATE_LIMIT=2,
+    LOGIN_RATE_WINDOW=3600,
+    SIGNUP_RATE_LIMIT=1,
+    SIGNUP_RATE_WINDOW=3600,
+    CHECKOUT_RATE_LIMIT=1,
+    CHECKOUT_RATE_WINDOW=3600,
+    UPLOAD_RATE_LIMIT=1,
+    UPLOAD_RATE_WINDOW=3600,
+)
+class AccountSecurityTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            'security-user', 'security@example.test', 'Old-strong-password!2',
+        )
+        Profile.objects.create(user=self.user, display_name='Security user')
+        self.plan = Plan.objects.create(
+            name='امنیت', kind='browse', price_rial=200000, duration_days=30,
+        )
+
+    def test_password_reset_is_generic_single_use_and_invalid_after_password_change(self):
+        response = self.client.post(reverse('password_reset'), {'email': 'nobody@example.test'})
+        self.assertRedirects(response, reverse('password_reset_done'))
+        self.assertEqual(len(mail.outbox), 0)
+        self.client.post(reverse('password_reset'), {'email': self.user.email})
+        self.assertEqual(len(mail.outbox), 1)
+        body = mail.outbox[0].body
+        match = re.search(r'/reset/([^/]+)/([^/\s]+)/', body)
+        self.assertIsNotNone(match)
+        reset_url = reverse(
+            'password_reset_confirm',
+            kwargs={'uidb64': match.group(1), 'token': match.group(2)},
+        )
+        response = self.client.get(reset_url, follow=True)
+        self.assertContains(response, 'رمز عبور جدید')
+        response = self.client.post(response.request['PATH_INFO'], {
+            'new_password1': 'New-strong-password!3',
+            'new_password2': 'New-strong-password!3',
+        })
+        self.assertRedirects(response, reverse('password_reset_complete'))
+        self.assertEqual(self.client.get(reset_url).status_code, 200)
+        self.assertContains(self.client.get(reset_url), 'پیوند معتبر نیست')
+        self.assertTrue(self.client.login(username='security-user', password='New-strong-password!3'))
+
+    def test_login_limit_is_persistent_and_does_not_use_forwarded_ip(self):
+        for _ in range(2):
+            response = self.client.post(reverse('login'), {
+                'username': 'security-user', 'password': 'wrong',
+                'HTTP_X_FORWARDED_FOR': '10.0.0.1',
+            })
+            self.assertEqual(response.status_code, 200)
+        response = self.client.post(reverse('login'), {
+            'username': 'security-user', 'password': 'Old-strong-password!2',
+            'HTTP_X_FORWARDED_FOR': '10.0.0.2',
+        })
+        self.assertEqual(response.status_code, 429)
+
+    @override_settings(
+        LOGIN_RATE_LIMIT=1, SIGNUP_RATE_LIMIT=1, UPLOAD_RATE_LIMIT=1,
+        SUPPORT_RATE_LIMIT=1, LOGIN_RATE_WINDOW=3600,
+    )
+    def test_empty_and_malformed_forms_return_429_with_retry_after(self):
+        invitation = self.user.invitation_link
+        cases = [
+            (reverse('login'), {}, 'تلاش‌های ورود'),
+            (reverse('signup-invitation', args=[invitation.token]), {}, 'تلاش‌های ثبت‌نام'),
+            (reverse('upload'), {}, 'بارگذاری‌های اخیر'),
+            (reverse('support'), {}, 'درخواست‌های اخیر'),
+        ]
+        for path, data, message in cases:
+            RequestThrottle.objects.all().delete()
+            if path in {reverse('upload'), reverse('support')}:
+                self.client.force_login(self.user)
+            else:
+                self.client.logout()
+            first = self.client.post(path, data)
+            self.assertEqual(first.status_code, 200)
+            second = self.client.post(path, data)
+            self.assertEqual(second.status_code, 429)
+            self.assertTrue(second.headers.get('Retry-After'))
+            self.assertIn(message, second.content.decode())
+
+    @override_settings(LOGIN_RATE_LIMIT=1, LOGIN_RATE_WINDOW=3600)
+    def test_admin_login_shares_login_limit_with_normal_login(self):
+        RequestThrottle.objects.all().delete()
+        self.assertEqual(
+            self.client.post(reverse('login'), {
+                'username': 'security-user', 'password': 'wrong',
+            }).status_code,
+            200,
+        )
+        response = self.client.post('/admin/login/', {
+            'username': 'security-user', 'password': 'wrong',
+        })
+        self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get('Retry-After'))
+        self.assertIn('تلاش‌های ورود', response.content.decode())
+
+    @override_settings(PASSWORD_RESET_RATE_LIMIT=2, PASSWORD_RESET_RATE_WINDOW=3600)
+    def test_password_reset_limit_is_generic_and_stops_repeated_mail(self):
+        RequestThrottle.objects.all().delete()
+        first = self.client.post(reverse('password_reset'), {'email': 'nobody@example.test'})
+        second = self.client.post(reverse('password_reset'), {'email': self.user.email})
+        third = self.client.post(reverse('password_reset'), {'email': self.user.email})
+        self.assertRedirects(first, reverse('password_reset_done'))
+        self.assertRedirects(second, reverse('password_reset_done'))
+        self.assertEqual(third.status_code, 429)
+        self.assertTrue(third.headers.get('Retry-After'))
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_non_staff_cannot_enter_admin_and_staff_without_permission_cannot_manage(self):
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get('/admin/').status_code, 302)
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        response = self.client.get('/admin/', follow=True)
+        self.assertNotContains(response, 'افزودن')
+        self.assertEqual(self.client.get('/admin/portfolio/payment/add/').status_code, 403)
+
+    def test_staff_permission_matrix_is_model_scoped(self):
+        self.user.is_staff = True
+        permissions = [
+            ('auth', 'user'),
+            ('portfolio', 'invitationlink'),
+            ('portfolio', 'invitation'),
+            ('portfolio', 'profile'),
+            ('portfolio', 'plan'),
+            ('portfolio', 'entitlement'),
+            ('portfolio', 'payment'),
+            ('portfolio', 'supportrequest'),
+        ]
+        for app_label, model in permissions:
+            self.user.user_permissions.add(
+                Permission.objects.get(
+                    codename=f'view_{model}', content_type__app_label=app_label,
+                ),
+            )
+        self.user.save(update_fields=['is_staff'])
+        self.client.force_login(self.user)
+        paths = [
+            '/admin/auth/user/',
+            '/admin/portfolio/invitationlink/',
+            '/admin/portfolio/invitation/',
+            '/admin/portfolio/profile/',
+            '/admin/portfolio/plan/',
+            '/admin/portfolio/entitlement/',
+            '/admin/portfolio/payment/',
+            '/admin/portfolio/supportrequest/',
+        ]
+        for path in paths:
+            self.assertEqual(self.client.get(path).status_code, 200, path)
+        self.user.user_permissions.remove(
+            Permission.objects.get(codename='view_payment', content_type__app_label='portfolio'),
+        )
+        self.assertEqual(self.client.get('/admin/portfolio/payment/').status_code, 403)
+
+    def test_support_and_account_deletion_are_requests_not_automatic_deletion(self):
+        self.client.force_login(self.user)
+        for page in ('terms', 'privacy', 'content-rules'):
+            self.assertContains(self.client.get(reverse('legal', args=[page])), 'پیش‌نویس')
+        self.assertContains(self.client.get(reverse('support')), 'درخواست پشتیبانی')
+        self.assertContains(self.client.get(reverse('report-content')), 'گزارش محتوا')
+        response = self.client.post(reverse('account-deletion'), {
+            'subject': 'حذف حساب', 'message': 'لطفاً درخواست را بررسی کنید.',
+        })
+        self.assertRedirects(response, reverse('dashboard'))
+        self.assertTrue(User.objects.filter(pk=self.user.pk).exists())
+        self.assertEqual(SupportRequest.objects.get().kind, SupportRequest.Kind.ACCOUNT)
+
+    def test_failed_checkout_is_rate_limited_without_affecting_callback(self):
+        self.client.force_login(self.user)
+        quote = self.client.get(reverse('checkout', args=[self.plan.pk])).context['quote']
+        self.assertEqual(self.client.post(reverse('checkout', args=[self.plan.pk]), {'quote': quote}).status_code, 302)
+        response = self.client.post(reverse('checkout', args=[self.plan.pk]), {'quote': quote})
+        self.assertEqual(response.status_code, 429)
+
+    def test_signup_and_upload_limits_are_applied_to_invalid_and_valid_attempts(self):
+        invitation = self.user.invitation_link
+        signup_data = {
+            'username': 'new-security-user', 'email': 'new@example.test',
+            'password1': 'New-strong-password!3', 'password2': 'mismatch',
+        }
+        self.assertEqual(
+            self.client.post(reverse('signup-invitation', args=[invitation.token]), signup_data).status_code,
+            200,
+        )
+        signup_data['password2'] = signup_data['password1']
+        self.assertEqual(
+            self.client.post(reverse('signup-invitation', args=[invitation.token]), signup_data).status_code,
+            429,
+        )
+        self.client.force_login(self.user)
+        upload_data = {'title': 'نمونه', 'file': SimpleUploadedFile('sample.png', PNG, 'image/png')}
+        self.assertEqual(self.client.post(reverse('upload'), upload_data).status_code, 302)
+        upload_data = {'title': 'نمونه دوم', 'file': SimpleUploadedFile('sample2.png', PNG, 'image/png')}
+        self.assertEqual(self.client.post(reverse('upload'), upload_data).status_code, 429)
+
+
+@override_settings(LOGIN_RATE_LIMIT=5, LOGIN_RATE_WINDOW=3600)
+class RateLimitConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    def test_sqlite_workers_do_not_exceed_shared_quota(self):
+        factory = RequestFactory()
+        barrier = threading.Barrier(10)
+        results, errors = [], []
+        lock = threading.Lock()
+
+        def worker():
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                request = factory.post('/login/', {}, REMOTE_ADDR='192.0.2.10')
+                allowed, _ = rate_limit(request, 'login')
+                with lock:
+                    results.append(allowed)
+            except Exception as error:
+                with lock:
+                    errors.append(error)
+            finally:
+                close_old_connections()
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.assertEqual(len(results), 10)
+        self.assertGreaterEqual(sum(results), 1)
+        self.assertLessEqual(sum(results), 5)
+        self.assertEqual(RequestThrottle.objects.get().attempts, sum(results))
 
 class BackupValidationTests(TestCase):
     def test_corrupted_backup_is_rejected(self):

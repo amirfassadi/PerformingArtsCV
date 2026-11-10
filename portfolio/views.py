@@ -1,6 +1,10 @@
 from django.contrib import messages
+from django.contrib import admin
 from django.conf import settings
 from django.contrib.auth import get_user_model, login
+from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.views import PasswordResetView
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
@@ -11,14 +15,59 @@ from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from .access import can_browse, can_view_profile, storage_quota, storage_used
-from .forms import ProfileForm, SignupForm, UploadForm, WorkLinkForm
+from .forms import ProfileForm, SignupForm, SupportRequestForm, UploadForm, WorkLinkForm
 from .invitations import InvitationUnavailable, register_invited_user
-from .models import MB, Favorite, InvitationLink, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
+from .models import MB, Favorite, InvitationLink, Plan, PortfolioFile, Profile, SiteSettings, SupportRequest, WorkLink
+from .security import rate_limit
 from .services import add_file, remove_file
 from .media import LimitedFileIterator, parse_range
 
 def home(request):
     return render(request, 'portfolio/home.html', {'free_mb': SiteSettings.current().free_storage_mb})
+
+@never_cache
+def login_view(request):
+    form = AuthenticationForm(request, data=request.POST if request.method == 'POST' else None)
+    if request.method == 'POST':
+        allowed, retry_after = rate_limit(request, 'login')
+        if not allowed:
+            form.add_error(None, 'تعداد تلاش‌های ورود بیش از حد مجاز است؛ بعداً دوباره تلاش کنید.')
+            response = render(request, 'registration/login.html', {'form': form}, status=429)
+            response['Retry-After'] = retry_after
+            return response
+        if form.is_valid():
+            login(request, form.get_user())
+            next_url = request.POST.get('next') or request.GET.get('next')
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
+            ):
+                return redirect(next_url)
+            return redirect('dashboard')
+    return render(request, 'registration/login.html', {'form': form, 'next': request.GET.get('next', '')})
+
+@never_cache
+def admin_login(request):
+    if request.method == 'POST':
+        allowed, retry_after = rate_limit(request, 'login')
+        if not allowed:
+            response = HttpResponse(
+                'تعداد تلاش‌های ورود بیش از حد مجاز است؛ بعداً دوباره تلاش کنید.',
+                status=429,
+            )
+            response['Retry-After'] = retry_after
+            return response
+    return admin.site.login(request)
+
+class LimitedPasswordResetView(PasswordResetView):
+    def post(self, request, *args, **kwargs):
+        allowed, retry_after = rate_limit(request, 'password_reset')
+        if not allowed:
+            form = self.get_form()
+            response = self.render_to_response(self.get_context_data(form=form))
+            response.status_code = 429
+            response['Retry-After'] = retry_after
+            return response
+        return super().post(request, *args, **kwargs)
 
 def _render_signup(request, context, status=200):
     response = render(request, 'registration/signup.html', context, status=status)
@@ -39,6 +88,13 @@ def signup(request, token=None):
         return _render_signup(request, {'invalid_invitation': True}, status=404)
 
     form = SignupForm(request.POST if request.method == 'POST' else None)
+    if request.method == 'POST':
+        allowed, retry_after = rate_limit(request, 'signup')
+        if not allowed:
+            form.add_error(None, 'تعداد تلاش‌های ثبت‌نام بیش از حد مجاز است؛ بعداً دوباره تلاش کنید.')
+            response = _render_signup(request, {'form': form, 'invitation': link}, status=429)
+            response['Retry-After'] = retry_after
+            return response
     if request.method == 'POST' and form.is_valid():
         try:
             user = register_invited_user(form, token)
@@ -104,17 +160,30 @@ def delete_link(request, pk):
 @never_cache
 @login_required
 def upload(request):
-    form = UploadForm(request.POST or None, request.FILES or None)
-    if getattr(request, 'upload_too_large', False):
-        form.add_error(None, 'حجم فایل از سقف مجاز هر بارگذاری بیشتر است.')
-    elif request.method == 'POST' and form.is_valid():
-        try:
-            add_file(own_profile(request.user), form.cleaned_data['file'], form.cleaned_data['title'])
-        except ValidationError as error:
-            form.add_error(None, error)
-        else:
-            messages.success(request, 'نمونه‌کار اضافه شد.')
-            return redirect('dashboard')
+    form = UploadForm(
+        request.POST if request.method == 'POST' else None,
+        request.FILES if request.method == 'POST' else None,
+    )
+    if request.method == 'POST':
+        allowed, retry_after = rate_limit(request, 'upload')
+        if not allowed:
+            form.add_error(None, 'تعداد بارگذاری‌های اخیر بیش از حد مجاز است؛ بعداً دوباره تلاش کنید.')
+            response = render(request, 'portfolio/form.html', {
+                'form': form, 'title': 'بارگذاری نمونه‌کار', 'multipart': True,
+                'hint': 'فرمت‌های مجاز: JPG، PNG، WebP، MP4 و WebM. فایل‌ها عمومی نیستند.',
+            }, status=429)
+            response['Retry-After'] = retry_after
+            return response
+        if getattr(request, 'upload_too_large', False):
+            form.add_error(None, 'حجم فایل از سقف مجاز هر بارگذاری بیشتر است.')
+        elif form.is_valid():
+            try:
+                add_file(own_profile(request.user), form.cleaned_data['file'], form.cleaned_data['title'])
+            except ValidationError as error:
+                form.add_error(None, error)
+            else:
+                messages.success(request, 'نمونه‌کار اضافه شد.')
+                return redirect('dashboard')
     return render(request, 'portfolio/form.html', {
         'form': form, 'title': 'بارگذاری نمونه‌کار', 'multipart': True,
         'hint': 'فرمت‌های مجاز: JPG، PNG، WebP، MP4 و WebM. فایل‌ها عمومی نیستند.',
@@ -218,3 +287,29 @@ def plans(request):
         'sandbox': settings.ZARINPAL_SANDBOX,
         'payments': request.user.payment_set.all()[:10],
     })
+
+@never_cache
+@login_required
+def support(request, kind='support'):
+    if kind not in {choice for choice, _ in SupportRequest.Kind.choices}:
+        return HttpResponse(status=404)
+    form = SupportRequestForm(request.POST if request.method == 'POST' else None)
+    if request.method == 'POST':
+        allowed, retry_after = rate_limit(request, 'support')
+        if not allowed:
+            form.add_error(None, 'تعداد درخواست‌های اخیر بیش از حد مجاز است؛ بعداً دوباره تلاش کنید.')
+            response = render(request, 'portfolio/support.html', {'form': form, 'kind': kind}, status=429)
+            response['Retry-After'] = retry_after
+            return response
+        if form.is_valid():
+            item = form.save(commit=False)
+            item.user, item.kind = request.user, kind
+            item.save()
+            messages.success(request, 'درخواست شما ثبت شد؛ این پیام ثبت درخواست است و زمان پاسخ‌گویی تضمین نمی‌کند.')
+            return redirect('dashboard')
+    return render(request, 'portfolio/support.html', {'form': form, 'kind': kind})
+
+def legal(request, page):
+    if page not in {'terms', 'privacy', 'content-rules'}:
+        return HttpResponse(status=404)
+    return render(request, f'portfolio/{page}.html')

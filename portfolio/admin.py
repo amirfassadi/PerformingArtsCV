@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Entitlement, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
+from .models import Entitlement, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings, SupportRequest, WorkLink
 
 admin.site.site_header = 'مدیریت صحنه‌نما'
 admin.site.site_title = 'صحنه‌نما'
@@ -99,3 +99,10 @@ class PaymentAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+@admin.register(SupportRequest)
+class SupportRequestAdmin(admin.ModelAdmin):
+    list_display = ['kind', 'subject', 'user', 'status', 'created_at']
+    list_filter = ['kind', 'status']
+    search_fields = ['subject', 'message', 'user__username']
+    readonly_fields = ['user', 'kind', 'subject', 'message', 'created_at']
