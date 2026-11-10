@@ -1,6 +1,6 @@
 # Issue 8 follow-up — account limit enforcement and usability
 
-Status: READY_FOR_IMPLEMENTATION. Executor: Copilot. Read docs/reports/issue-008-review.md and docs/reports/issue-008.md before editing.
+Status: CORE_FINDINGS_VERIFIED in 95c8bfd4c40c79c4f6ecc95310c840dff10d2f75; ACCOUNT-001/002 independently resolved, 81 tests passed. Remaining independent usability coverage and external prerequisites are recorded in docs/reports/issue-008-review.md. Original instructions below are retained for traceability; do not repeat already corrected login work. Executor: Copilot.
 
 Continue in E:/miranco.project/PerformingArtsCV-artistic-review on codex/issue-8-account-support-security, including the coordinator review documents. Preserve unrelated changes and existing history. Do not reset, force-push or start from main. The delivered implementation source was eb18b141a926f679f5654d2d3c216eb512e6b7a6; the following coordinator commit contains these instructions, not application fixes.
 

@@ -13,21 +13,22 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core import mail
 from django.db import IntegrityError, close_old_connections, transaction
-from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from .access import can_browse, storage_quota, storage_used
 from .billing import start_payment, verify_payment
 from .forms import UploadForm
 from .gateway import GatewayError, Zarinpal
-from .models import MB, Entitlement, Favorite, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings, SupportRequest, WorkLink
+from .models import MB, Entitlement, Favorite, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, RequestThrottle, SiteSettings, SupportRequest, WorkLink
+from .security import rate_limit
 from .media_validation import MediaDecoderUnavailable
 from .services import add_file
 
@@ -1000,6 +1001,59 @@ class AccountSecurityTests(TestCase):
         })
         self.assertEqual(response.status_code, 429)
 
+    @override_settings(
+        LOGIN_RATE_LIMIT=1, SIGNUP_RATE_LIMIT=1, UPLOAD_RATE_LIMIT=1,
+        SUPPORT_RATE_LIMIT=1, LOGIN_RATE_WINDOW=3600,
+    )
+    def test_empty_and_malformed_forms_return_429_with_retry_after(self):
+        invitation = self.user.invitation_link
+        cases = [
+            (reverse('login'), {}, 'تلاش‌های ورود'),
+            (reverse('signup-invitation', args=[invitation.token]), {}, 'تلاش‌های ثبت‌نام'),
+            (reverse('upload'), {}, 'بارگذاری‌های اخیر'),
+            (reverse('support'), {}, 'درخواست‌های اخیر'),
+        ]
+        for path, data, message in cases:
+            RequestThrottle.objects.all().delete()
+            if path in {reverse('upload'), reverse('support')}:
+                self.client.force_login(self.user)
+            else:
+                self.client.logout()
+            first = self.client.post(path, data)
+            self.assertEqual(first.status_code, 200)
+            second = self.client.post(path, data)
+            self.assertEqual(second.status_code, 429)
+            self.assertTrue(second.headers.get('Retry-After'))
+            self.assertIn(message, second.content.decode())
+
+    @override_settings(LOGIN_RATE_LIMIT=1, LOGIN_RATE_WINDOW=3600)
+    def test_admin_login_shares_login_limit_with_normal_login(self):
+        RequestThrottle.objects.all().delete()
+        self.assertEqual(
+            self.client.post(reverse('login'), {
+                'username': 'security-user', 'password': 'wrong',
+            }).status_code,
+            200,
+        )
+        response = self.client.post('/admin/login/', {
+            'username': 'security-user', 'password': 'wrong',
+        })
+        self.assertEqual(response.status_code, 429)
+        self.assertTrue(response.headers.get('Retry-After'))
+        self.assertIn('تلاش‌های ورود', response.content.decode())
+
+    @override_settings(PASSWORD_RESET_RATE_LIMIT=2, PASSWORD_RESET_RATE_WINDOW=3600)
+    def test_password_reset_limit_is_generic_and_stops_repeated_mail(self):
+        RequestThrottle.objects.all().delete()
+        first = self.client.post(reverse('password_reset'), {'email': 'nobody@example.test'})
+        second = self.client.post(reverse('password_reset'), {'email': self.user.email})
+        third = self.client.post(reverse('password_reset'), {'email': self.user.email})
+        self.assertRedirects(first, reverse('password_reset_done'))
+        self.assertRedirects(second, reverse('password_reset_done'))
+        self.assertEqual(third.status_code, 429)
+        self.assertTrue(third.headers.get('Retry-After'))
+        self.assertEqual(len(mail.outbox), 1)
+
     def test_non_staff_cannot_enter_admin_and_staff_without_permission_cannot_manage(self):
         self.client.force_login(self.user)
         self.assertEqual(self.client.get('/admin/').status_code, 302)
@@ -1008,6 +1062,43 @@ class AccountSecurityTests(TestCase):
         response = self.client.get('/admin/', follow=True)
         self.assertNotContains(response, 'افزودن')
         self.assertEqual(self.client.get('/admin/portfolio/payment/add/').status_code, 403)
+
+    def test_staff_permission_matrix_is_model_scoped(self):
+        self.user.is_staff = True
+        permissions = [
+            ('auth', 'user'),
+            ('portfolio', 'invitationlink'),
+            ('portfolio', 'invitation'),
+            ('portfolio', 'profile'),
+            ('portfolio', 'plan'),
+            ('portfolio', 'entitlement'),
+            ('portfolio', 'payment'),
+            ('portfolio', 'supportrequest'),
+        ]
+        for app_label, model in permissions:
+            self.user.user_permissions.add(
+                Permission.objects.get(
+                    codename=f'view_{model}', content_type__app_label=app_label,
+                ),
+            )
+        self.user.save(update_fields=['is_staff'])
+        self.client.force_login(self.user)
+        paths = [
+            '/admin/auth/user/',
+            '/admin/portfolio/invitationlink/',
+            '/admin/portfolio/invitation/',
+            '/admin/portfolio/profile/',
+            '/admin/portfolio/plan/',
+            '/admin/portfolio/entitlement/',
+            '/admin/portfolio/payment/',
+            '/admin/portfolio/supportrequest/',
+        ]
+        for path in paths:
+            self.assertEqual(self.client.get(path).status_code, 200, path)
+        self.user.user_permissions.remove(
+            Permission.objects.get(codename='view_payment', content_type__app_label='portfolio'),
+        )
+        self.assertEqual(self.client.get('/admin/portfolio/payment/').status_code, 403)
 
     def test_support_and_account_deletion_are_requests_not_automatic_deletion(self):
         self.client.force_login(self.user)
@@ -1049,6 +1140,44 @@ class AccountSecurityTests(TestCase):
         self.assertEqual(self.client.post(reverse('upload'), upload_data).status_code, 302)
         upload_data = {'title': 'نمونه دوم', 'file': SimpleUploadedFile('sample2.png', PNG, 'image/png')}
         self.assertEqual(self.client.post(reverse('upload'), upload_data).status_code, 429)
+
+
+@override_settings(LOGIN_RATE_LIMIT=5, LOGIN_RATE_WINDOW=3600)
+class RateLimitConcurrencyTests(TransactionTestCase):
+    reset_sequences = True
+
+    def test_sqlite_workers_do_not_exceed_shared_quota(self):
+        factory = RequestFactory()
+        barrier = threading.Barrier(10)
+        results, errors = [], []
+        lock = threading.Lock()
+
+        def worker():
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                request = factory.post('/login/', {}, REMOTE_ADDR='192.0.2.10')
+                allowed, _ = rate_limit(request, 'login')
+                with lock:
+                    results.append(allowed)
+            except Exception as error:
+                with lock:
+                    errors.append(error)
+            finally:
+                close_old_connections()
+
+        threads = [threading.Thread(target=worker) for _ in range(10)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.assertEqual(len(results), 10)
+        self.assertGreaterEqual(sum(results), 1)
+        self.assertLessEqual(sum(results), 5)
+        self.assertEqual(RequestThrottle.objects.get().attempts, sum(results))
 
 class BackupValidationTests(TestCase):
     def test_corrupted_backup_is_rejected(self):

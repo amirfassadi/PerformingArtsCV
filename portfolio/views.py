@@ -1,7 +1,9 @@
 from django.contrib import messages
+from django.contrib import admin
 from django.conf import settings
-from django.contrib.auth import authenticate, get_user_model, login
+from django.contrib.auth import get_user_model, login
 from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.views import PasswordResetView
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -25,7 +27,7 @@ def home(request):
 
 @never_cache
 def login_view(request):
-    form = AuthenticationForm(request, data=request.POST or None)
+    form = AuthenticationForm(request, data=request.POST if request.method == 'POST' else None)
     if request.method == 'POST':
         allowed, retry_after = rate_limit(request, 'login')
         if not allowed:
@@ -42,6 +44,30 @@ def login_view(request):
                 return redirect(next_url)
             return redirect('dashboard')
     return render(request, 'registration/login.html', {'form': form, 'next': request.GET.get('next', '')})
+
+@never_cache
+def admin_login(request):
+    if request.method == 'POST':
+        allowed, retry_after = rate_limit(request, 'login')
+        if not allowed:
+            response = HttpResponse(
+                'تعداد تلاش‌های ورود بیش از حد مجاز است؛ بعداً دوباره تلاش کنید.',
+                status=429,
+            )
+            response['Retry-After'] = retry_after
+            return response
+    return admin.site.login(request)
+
+class LimitedPasswordResetView(PasswordResetView):
+    def post(self, request, *args, **kwargs):
+        allowed, retry_after = rate_limit(request, 'password_reset')
+        if not allowed:
+            form = self.get_form()
+            response = self.render_to_response(self.get_context_data(form=form))
+            response.status_code = 429
+            response['Retry-After'] = retry_after
+            return response
+        return super().post(request, *args, **kwargs)
 
 def _render_signup(request, context, status=200):
     response = render(request, 'registration/signup.html', context, status=status)
@@ -134,7 +160,10 @@ def delete_link(request, pk):
 @never_cache
 @login_required
 def upload(request):
-    form = UploadForm(request.POST or None, request.FILES or None)
+    form = UploadForm(
+        request.POST if request.method == 'POST' else None,
+        request.FILES if request.method == 'POST' else None,
+    )
     if request.method == 'POST':
         allowed, retry_after = rate_limit(request, 'upload')
         if not allowed:
@@ -264,7 +293,7 @@ def plans(request):
 def support(request, kind='support'):
     if kind not in {choice for choice, _ in SupportRequest.Kind.choices}:
         return HttpResponse(status=404)
-    form = SupportRequestForm(request.POST or None)
+    form = SupportRequestForm(request.POST if request.method == 'POST' else None)
     if request.method == 'POST':
         allowed, retry_after = rate_limit(request, 'support')
         if not allowed:

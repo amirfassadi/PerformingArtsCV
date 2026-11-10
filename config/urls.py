@@ -1,12 +1,13 @@
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from portfolio.views import login_view
+from portfolio.views import LimitedPasswordResetView, admin_login, login_view
 from django.urls import include, path
 
 urlpatterns = [
+    path('admin/login/', admin_login, name='admin-login'),
     path('admin/', admin.site.urls),
     path('login/', login_view, name='login'),
-    path('password-reset/', auth_views.PasswordResetView.as_view(
+    path('password-reset/', LimitedPasswordResetView.as_view(
         template_name='registration/password_reset_form.html',
         email_template_name='registration/password_reset_email.txt',
         subject_template_name='registration/password_reset_subject.txt',

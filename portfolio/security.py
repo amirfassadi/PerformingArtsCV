@@ -21,7 +21,7 @@ def rate_limit(request, action, limit=None, window_seconds=None):
     raw_key = f'{action}:{request_identity(request)}'
     key = hashlib.sha256(raw_key.encode()).hexdigest()
     now = timezone.now()
-    for attempt in range(3):
+    for attempt in range(8):
         try:
             with transaction.atomic():
                 row, _ = RequestThrottle.objects.select_for_update().get_or_create(
@@ -36,6 +36,6 @@ def rate_limit(request, action, limit=None, window_seconds=None):
                 retry_after = max(1, window_seconds - int((now - row.window_started).total_seconds()))
                 return allowed, retry_after
         except (IntegrityError, OperationalError):
-            if attempt == 2:
+            if attempt == 7:
                 return False, window_seconds
             time.sleep(0.05 * (attempt + 1))
