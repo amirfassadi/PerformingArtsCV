@@ -369,6 +369,9 @@ def _validate_mp4(data):
     if len(moov) != 1:
         raise InvalidMedia
     moov_children = _mp4_boxes(data, *moov[0], depth=1)
+    has_movie_fragments = any(kind == b'mvex' for kind, _, _ in moov_children) and any(
+        kind == b'moof' for kind, _, _ in top
+    )
     has_video_track = False
     for kind, trak_start, trak_end in moov_children:
         if kind != b'trak':
@@ -395,12 +398,14 @@ def _validate_mp4(data):
         if (required_tables.issubset(table_contents)
                 and (b'stco' in table_contents or b'co64' in table_contents)
                 and _mp4_table_has_entries(data, table_contents[b'stsd'], 4)
-                and _mp4_table_has_entries(data, table_contents[b'stsz'], 8)
-                and _mp4_table_has_entries(data, table_contents[b'stts'], 4)
-                and _mp4_table_has_entries(data, table_contents[b'stsc'], 4)
-                and _mp4_table_has_entries(
-                    data, table_contents.get(b'stco', table_contents.get(b'co64')), 4,
-                )):
+                and (has_movie_fragments or (
+                    _mp4_table_has_entries(data, table_contents[b'stsz'], 8)
+                    and _mp4_table_has_entries(data, table_contents[b'stts'], 4)
+                    and _mp4_table_has_entries(data, table_contents[b'stsc'], 4)
+                    and _mp4_table_has_entries(
+                        data, table_contents.get(b'stco', table_contents.get(b'co64')), 4,
+                    )
+                ))):
             has_video_track = True
             break
     if not has_video_track:
