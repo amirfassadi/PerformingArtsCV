@@ -8,7 +8,7 @@ User=performingartscv
 Group=performingartscv
 WorkingDirectory=/srv/performingartscv/app
 EnvironmentFile=/etc/performingartscv/performingartscv.env
-ExecStart=/srv/performingartscv/venv/bin/python -m waitress --listen=127.0.0.1:8000 --trusted-proxy=127.0.0.1 --trusted-proxy-count=1 --trusted-proxy-headers=x-forwarded-for --trusted-proxy-headers=x-forwarded-proto --clear-untrusted-proxy-headers config.wsgi:application
+ExecStart=/srv/performingartscv/venv/bin/python -m waitress --listen=127.0.0.1:8000 --trusted-proxy=127.0.0.1 --trusted-proxy-count=1 "--trusted-proxy-headers=x-forwarded-for x-forwarded-proto" --clear-untrusted-proxy-headers config.wsgi:application
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

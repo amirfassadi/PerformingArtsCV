@@ -6,7 +6,27 @@
 - مبنا: `ae3b84d4670831456446b3995fc48e93d279d826`
 - SHA کد: `6e70af79346de2094370fd363bb9a66532d8a174`
 - SHA اصلاح DEPLOY-001: `7a5cd6e8bdda2a372a534eb299272d314c5c1aec`
+- SHA اصلاح فرمان service: `55fe0fd126c9555cc9068420af1e0dd495454066`
 - انتشار: بر عهدهٔ هماهنگ‌کننده
+
+## اصلاح نهایی فرمان Waitress — 2026-11-10 22:21 +03:30
+
+- هر دو نام هدر اکنون در یک option واحد و quote‌شدهٔ Waitress قرار دارند:
+  `--trusted-proxy-headers="x-forwarded-for x-forwarded-proto"`.
+- این مقدار در `deploy/performingartscv.service.example` و راهنمای `docs/OPERATIONS.md`
+  یکسان است؛ گزینهٔ تکراری حذف شد و peer دقیق `127.0.0.1` و یک hop بدون تغییر باقی ماند.
+- `scripts/waitress_service_smoke.py` خط `ExecStart` را مستقیماً از فایل service می‌خواند،
+  با `shlex` همان optionها را parse می‌کند و تنها interpreter، application fixture و port
+  موقت را جایگزین می‌کند. آزمون مستقل kwargs جایگزین آزمون فرمان service نیست.
+- با فرمان استخراج‌شده و Waitress نصب‌شده، دو IP ساختگی به دو `REMOTE_ADDR` متفاوت رسیدند،
+  `X-Forwarded-Proto=https` به scheme HTTPS تبدیل شد، زنجیرهٔ جعلی با `trusted-proxy-count=1`
+  فقط hop نهایی را گرفت و quota را دور نزد.
+- همان فرمان روی Django واقعی با داده/SQLite موقت اجرا شد؛ درخواست‌های POST به
+  `/login/`، `/admin/login/` و دوباره `/login/` برای یک IP نتایج `200, 200, 429` دادند،
+  بنابراین quota ورود عادی و ادمین مشترک باقی ماند.
+- بخش پاک‌سازی Caddy همچنان در نمونه باقی است؛ Caddy واقعی در این محیط اجرا نشد و
+  صرفاً مرز آن با header overwrite مستند و شبیه‌سازی شد. peer غیر trusted در آزمون middleware
+  قبلی رد شد؛ هیچ wildcard trust یا مصرف مستقیم هدر در Django اضافه نشده است.
 
 ## اصلاح DEPLOY-001 — 2026-11-10 21:54 تا 22:05 +03:30
 
@@ -73,6 +93,8 @@
 - `manage.py check --deploy` با تنظیمات تولید ساختگی: exit 0؛ هشدارهای HSTS subdomains/preload و secret کوتاه ساختگی ثبت شد و به‌عنوان استقرار تولید تلقی نشد.
 - `scripts/browser_smoke.py`: موفق؛ شامل تست مرورگر و backup/restore ایزوله.
 - `scripts/waitress_proxy_smoke.py`: موفق؛ مرز اعتماد peer/header و سهمیه مستقل.
+- `scripts/waitress_service_smoke.py`: موفق؛ استخراج و اجرای دقیق فرمان service، HTTPS،
+  دو هویت، anti-spoof و quota مشترک Django login/admin.
 - `scripts/http_workload_smoke.py`: موفق؛ workload محدود بالا.
 - سناریوی مستقیم synthetic backup/restore: healthcheck، backup ثانویه، verify، restore و تطبیق داده/فایل موفق.
 - snapshot با manifest خراب: `verify_backup` با exit code 1 شکست خورد.

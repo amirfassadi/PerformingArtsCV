@@ -9,7 +9,7 @@
 راهنمای README را اجرا کن. `runserver` فقط برای توسعه است. برای اجرای سرویس پشت Caddy می‌توان از Waitress استفاده کرد. این نمونه فقط وقتی معتبر است که Caddy تنها peer ورودی به loopback باشد:
 
 ```powershell
-.\.venv\Scripts\python.exe -m waitress --listen=127.0.0.1:8000 --trusted-proxy=127.0.0.1 --trusted-proxy-count=1 --trusted-proxy-headers=x-forwarded-for --trusted-proxy-headers=x-forwarded-proto --clear-untrusted-proxy-headers config.wsgi:application
+.\.venv\Scripts\python.exe -m waitress --listen=127.0.0.1:8000 --trusted-proxy=127.0.0.1 --trusted-proxy-count=1 "--trusted-proxy-headers=x-forwarded-for x-forwarded-proto" --clear-untrusted-proxy-headers config.wsgi:application
 ```
 
 اجرای مستقیم و غیرپراکسی باید بدون گزینه‌های `--trusted-proxy*` بماند؛ در آن حالت Django فقط

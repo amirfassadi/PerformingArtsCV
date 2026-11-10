@@ -1,6 +1,6 @@
 # Issue 9 — independent coordinator review
 
-Reviewed source: 46ce479a404c3979213d1bea60b6945c99639744 (implementation 6e70af79346de2094370fd363bb9a66532d8a174), based on ae3b84d4670831456446b3995fc48e93d279d826. Date: 2026-11-10. Initial worktree clean.
+Initial reviewed source: 46ce479a404c3979213d1bea60b6945c99639744. Current update: DEPLOY-001 independently resolved in 86aae12485d4ac5d2248f1503a9debdacd2b9f51; see final verification below. Historical reviews are retained. Stage 7 remains incomplete; no real deployment occurred.
 
 Disposition: CHANGES_REQUESTED for DEPLOY-001. The prepared backup/recovery behavior below is independently verified; no real deployment, external backup transfer or production monitoring was performed.
 
@@ -54,3 +54,11 @@ Independent live WSGI reproduction with the actual service options (only interpr
 Thus the report's claim that the real CLI options were verified does not establish correct client identity. An HTTP root workload returning 200 cannot detect this defect. Fix the CLI to supply both header names as one appropriately quoted option value, and make regression/integration checks consume the actual deployed command configuration rather than a separate Python-only equivalent. Document/sanitize the Caddy side as before; real Caddy was not exercised.
 
 New bounded HTTP workload and documentation are useful local preparation. They do not resolve DEPLOY-001 or establish representative pilot capacity, an installed scheduler, offsite backup or delivered monitoring alerts. No change to the seven-item acceptance rubric: Stage 7 remains 1/7 = 14.3%, overall MVP remains 64.9%. No merge, deployment or production-readiness approval is granted.
+
+## Final proxy correction verification — 86aae124
+
+Reviewed code/report source: 86aae12485d4ac5d2248f1503a9debdacd2b9f51 (implementation 55fe0fd126c9555cc9068420af1e0dd495454066). Service and documented startup now use one quoted trusted-proxy-headers argument containing both header names.
+
+Independently ran scripts/waitress_service_smoke.py successfully: it reads the actual ExecStart, substitutes the interpreter/application fixture/port, launches the real Waitress CLI and verifies distinct REMOTE_ADDR identities, HTTPS scheme and last-hop chain behavior. It additionally launches the real Django app with isolated data and checks shared normal/admin login quota using POST statuses [200,200,429]. scripts/waitress_proxy_smoke.py independently passed its peer/header tests. All 84 Django tests passed again, including existing security/payment/backup/concurrency regressions. System check reported no issues. Full Edge smoke and real Caddy/systemd were not rerun in this follow-up; the correction changes deployment examples/docs and adds a smoke script, not application/frontend behavior.
+
+DEPLOY-001 is resolved for the tested local WSGI/proxy boundary. Actual HTTPS hosting, Caddy/systemd execution, offsite scheduled backup, monitoring and representative pilot load remain unverified. No additional whole seven-item stage criterion is completed merely by clearing this template bug: Stage 7 remains 14.3%, overall 64.9%. New frontend polish can proceed independently from this reviewed baseline; preserve the deployment/security corrections.
