@@ -1,22 +1,21 @@
 {% extends 'base.html' %}
+{% block title %}ثبت‌نام دعوتی | درباره‌ی من{% endblock %}
 {% block content %}
-<section class="form-card">
-    <p class="eyebrow">شروع یک روایت تازه</p>
+<div class="auth-wrap"><section class="form-art-card art-panel">
+    <div class="card-badge-top"><span class="badge-dot"></span><span>شروع یک روایت تازه</span></div>
     {% if invalid_invitation %}
-        <h1>لینک دعوت معتبر نیست</h1>
-        <p class="notice">این لینک پیدا نشد یا غیرفعال شده است. برای ثبت‌نام، لینک دعوت فعال لازم است.</p>
+        <h1 class="card-title">لینک دعوت معتبر نیست</h1>
+        <p class="notice notice-warning">این لینک پیدا نشد یا غیرفعال شده است. برای ثبت‌نام، لینک دعوت فعال لازم است.</p>
     {% elif requires_invitation %}
-        <h1>ثبت‌نام با دعوت</h1>
-        <p class="notice">ساخت حساب فقط از طریق لینک دعوت فعال ممکن است. اگر دعوت شده‌ای، لینک اختصاصی را از دعوت‌کننده دریافت کن.</p>
+        <h1 class="card-title">ثبت‌نام با دعوت</h1>
+        <p class="notice notice-info">ساخت حساب فقط از طریق لینک دعوت فعال ممکن است. اگر دعوت شده‌ای، لینک اختصاصی را از دعوت‌کننده دریافت کن.</p>
     {% else %}
-        <h1>حسابت را بساز</h1>
-        <p class="muted">صفحه خودت را بساز و آثارت را اضافه کن. دیدن رزومه دیگران اشتراک جدا می‌خواهد.</p>
-        <form method="post">
-            {% csrf_token %}
-            {{ form.as_p }}
-            <button class="button">ثبت‌نام و ساخت صفحه</button>
+        <h1 class="card-title">حسابت را بساز</h1>
+        <p class="card-subtitle">رزومه و نمونه‌کارهایت را یک‌جا جمع کن. مشاهده رزومه دیگران اشتراک جدا می‌خواهد.</p>
+        <form method="post" class="auth-form">{% csrf_token %}{{ form.as_p }}
+            <button class="btn btn-primary btn-block btn-lg" type="submit">ثبت‌نام و ساخت صفحه</button>
         </form>
     {% endif %}
-    <p class="muted">قبلاً ثبت‌نام کردی؟ <a href="{% url 'login' %}">وارد شو</a></p>
-</section>
+    <div class="auth-footer-note"><p>قبلاً ثبت‌نام کردی؟ <a class="text-link" href="{% url 'login' %}">وارد شو</a></p></div>
+</section></div>
 {% endblock %}

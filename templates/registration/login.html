@@ -1,1 +1,30 @@
-{% extends 'base.html' %}{% block content %}<section class="form-card"><p class="eyebrow">دوباره روی صحنه</p><h1>ورود به حساب</h1><form method="post">{% csrf_token %}{{ form.as_p }}{% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}<button class="button">ورود</button></form><p class="muted">برای ساخت حساب، <a href="{% url 'signup' %}">لینک دعوت فعال</a> لازم است.</p></section>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}ورود به حساب | درباره‌ی من{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+    <div class="form-art-card art-panel">
+        <div class="card-badge-top">
+            <span class="badge-dot"></span>
+            <span>ورود هنرمندان و اهالی صحنه</span>
+        </div>
+
+        <h1 class="card-title">خوش‌آمدید به صحنه</h1>
+        <p class="card-subtitle">جهت مدیریت رزومه و دسترسی به پنل کاربری وارد شوید.</p>
+
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            {{ form.as_p }}
+            {% if next %}
+                <input type="hidden" name="next" value="{{ next }}">
+            {% endif %}
+
+            <button class="btn btn-primary btn-block btn-lg" type="submit">ورود</button>
+        </form>
+
+        <div class="auth-footer-note">
+            <p>هنوز حساب کاربری ندارید؟ <a class="text-link" href="{% url 'signup' %}">ثبت‌نام با لینک دعوت</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}
