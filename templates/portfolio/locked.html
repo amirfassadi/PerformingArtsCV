@@ -1,1 +1,41 @@
-{% extends 'base.html' %}{% block content %}<section class="locked-state"><span class="large-symbol" aria-hidden="true">◈</span><p class="eyebrow">دسترسی ویژه جست‌وجوگران</p><h1>برای کشف استعدادها،<br>اشتراک مشاهده لازم است.</h1><p class="lead">رزومه و نمونه‌کار دیگران فقط با اشتراک مشاهده فعال در دسترس است. خرید فضای بیشتر، دسترسی مشاهده ایجاد نمی‌کند.</p><div class="actions"><a class="button" href="{% url 'plans' %}">دیدن پلن‌ها ←</a><a class="button secondary" href="{% url 'dashboard' %}">رفتن به صفحه خودم</a></div></section>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}دسترسی نیازمند اشتراک | درباره‌ی من{% endblock %}
+
+{% block content %}
+<section class="locked-screen-wrap">
+    <div class="locked-box art-panel">
+        <div class="locked-icon-badge" aria-hidden="true">
+            <span>🔒</span>
+        </div>
+
+        <div class="badge-stage">
+            <span class="badge-dot"></span>
+            <span>دسترسی ویژه مشترکان جست‌وجو</span>
+        </div>
+
+        <h1 class="locked-title">برای کشف استعدادها، اشتراک مشاهده لازم است.</h1>
+
+        <p class="locked-desc">
+            پلتفرم «درباره‌ی من» جهت حفظ شأن، کرامت حرفه‌ای و حریم خصوصی هنرمندان، دسترسی عمومی و بدون اشتراک به مشخصات اعضا را مسدود نموده است.
+            برای بررسی سوابق و ویدئوهای شو ریل، تهیه اشتراک مشاهده الزامی است.
+        </p>
+
+        <div class="locked-rules-card">
+            <h4>قوانین شفاف پلتفرم:</h4>
+            <ul>
+                <li>ساخت صفحه، مدیریت و نگهداری فایل‌های شخصی خود شما همواره رایگان است.</li>
+                <li>خرید بسته فضای ذخیره‌سازی اضافی، مجوز مشاهده رزومه دیگران را ایجاد نمی‌کند.</li>
+                <li>اشتراک مشاهده، سهمیه مگابایتی بارگذاری فایل شما را افزایش نمی‌دهد.</li>
+            </ul>
+        </div>
+
+        <div class="locked-actions-row">
+            <a class="btn btn-primary btn-lg" href="{% url 'plans' %}">
+                <span>مشاهده و تهیه پلن مشاهده</span>
+                <span class="btn-arrow">←</span>
+            </a>
+            <a class="btn btn-outline btn-lg" href="{% url 'dashboard' %}">بازگشت به صفحه شخصی من</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

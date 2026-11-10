@@ -1,11 +1,185 @@
-{% extends 'base.html' %}{% block content %}
-<div class="page-heading"><div><p class="eyebrow">فضای شخصی تو</p><h1>سلام، {{ profile.display_name }}</h1><p class="muted">رزومه، آثار و فضای حسابت را از اینجا مدیریت کن.</p></div><a class="button secondary" href="{% url 'profile' profile.pk %}">پیش‌نمایش رزومه ←</a></div>
-<div class="dashboard-grid"><section class="panel"><div class="section-title"><h2>رزومه من</h2><a href="{% url 'edit-profile' %}">ویرایش ←</a></div><span class="tag">{% if profile.published %}قابل مشاهده برای مشترکان{% else %}پیش‌نویس{% endif %}</span><h3>{{ profile.display_name }}</h3><p>{{ profile.specialty|default:'هنوز تخصصت را ننوشته‌ای.' }}</p><p class="muted">{{ profile.city|default:'شهر مشخص نشده' }}</p><p>{{ profile.biography|default:'از خودت و مسیر هنری‌ات بنویس.'|truncatewords:40 }}</p><p class="muted">انتشار رزومه یعنی نمایش به دارندگان اشتراک مشاهده؛ صفحه عمومی نیست.</p></section>
-<aside class="panel storage-panel"><p class="eyebrow">فضای ذخیره‌سازی</p><div class="storage-number">{{ used_mb|floatformat:2 }} <small>از {{ quota_mb|floatformat:0 }} مگابایت</small></div><progress max="100" value="{{ usage_percent|stringformat:'f' }}">{{ usage_percent|floatformat:0 }}٪</progress><p>{{ remaining_mb|floatformat:2 }} مگابایت فضای خالی</p>{% if over_quota %}<p class="notice">مصرف فعلی از سهمیه بیشتر است. برای بارگذاری، فضا آزاد کن یا پلن را ارتقا بده.</p>{% endif %}<a class="button secondary full" href="{% url 'plans' %}">مشاهده پلن‌های فضا</a><hr><p class="muted">دسترسی به رزومه دیگران</p><strong>{% if browse_active %}اشتراک مشاهده فعال است{% else %}اشتراک مشاهده فعال نیست{% endif %}</strong></aside></div>
-<section class="panel"><div class="section-title"><div><p class="eyebrow">آرشیو تو</p><h2>نمونه‌کارها</h2></div><a class="button small" href="{% url 'upload' %}">+ افزودن فایل</a></div>
-<div class="media-grid">{% for item in profile.files.all %}<article class="media-card">{% if item.is_video %}<video controls preload="metadata" src="{% url 'media' item.pk %}"></video>{% else %}<img loading="lazy" src="{% url 'media' item.pk %}" alt="{{ item.title }}">{% endif %}<div class="media-caption"><h3>{{ item.title }}</h3><p class="muted">{{ item.size|filesizeformat }}</p><form method="post" action="{% url 'delete-file' item.pk %}">{% csrf_token %}<button class="text-button danger">حذف فایل</button></form></div></article>{% empty %}<div class="empty-state"><span aria-hidden="true">▧</span><h3>اولین نمونه‌کارت را اضافه کن</h3><p>یک تصویر یا ویدئو از تجربه‌های روی صحنه و جلوی دوربین.</p></div>{% endfor %}</div></section>
-<section class="panel"><div class="section-title"><h2>لینک آثار</h2><a href="{% url 'add-link' %}">+ افزودن لینک</a></div>{% for link in profile.links.all %}<div class="link-row"><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.title }} ↗</a><form method="post" action="{% url 'delete-link' link.pk %}">{% csrf_token %}<button class="text-button danger">حذف</button></form></div>{% empty %}<p class="muted">لینک آثار منتشرشده‌ات را اینجا اضافه کن.</p>{% endfor %}</section>
-<section class="panel" aria-labelledby="invitation-heading">
+{% extends 'base.html' %}
+{% block title %}میز کار هنرمند | درباره‌ی من{% endblock %}
+
+{% block content %}
+<div class="dashboard-head">
+    <div class="head-info">
+        <div class="badge-stage">
+            <span class="badge-dot"></span>
+            <span>میز کار شخصی هنرمند</span>
+        </div>
+        <h1 class="head-title">درود، {{ profile.display_name }}</h1>
+        <p class="head-desc">مدیریت مشخصات هنری، سوابق حرفه‌ای، فایل‌های نمونه‌کار و سهمیه ذخیره‌سازی.</p>
+    </div>
+
+    <div class="head-actions">
+        <a class="btn btn-primary" href="{% url 'profile' profile.pk %}">
+            <span>پیش‌نمایش رزومه</span>
+            <span class="btn-arrow">←</span>
+        </a>
+    </div>
+</div>
+
+<div class="dashboard-grid-layout">
+    <!-- ستون اصلی خلاصه و بخش‌های رزومه -->
+    <div class="dashboard-main-col">
+        <!-- کارت وضعیت رزومه -->
+        <section class="art-panel">
+            <div class="panel-header-flex">
+                <div>
+                    <h2 class="panel-header-title">وضعیت انتشار صفحه</h2>
+                    <p class="panel-header-sub">آیا رزومه شما در نتایج جست‌وجوی انتخاب‌کنندگان و مشترکان نمایش داده شود؟</p>
+                </div>
+                <a class="btn btn-outline btn-sm" href="{% url 'edit-profile' %}">ویرایش اطلاعات پایه ←</a>
+            </div>
+
+            <div class="status-summary-card">
+                <div class="status-indicator-box">
+                    {% if profile.published %}
+                        <span class="status-chip active">◉ قابل مشاهده برای مشترکان</span>
+                        <p class="status-help">رزومه و نمونه‌کارهای شما در بخش کشف هنرمندان برای کاربران دارای اشتراک مشاهده فعال قابل رؤیت است.</p>
+                    {% else %}
+                        <span class="status-chip draft">◎ در حالت پیش‌نویس خصوصی</span>
+                        <p class="status-help">رزومه شما فقط برای خودتان قابل دیدن است و در نتایج جست‌وجو نمایش داده نمی‌شود. برای انتشار، تیک «نمایش به مشترکان» را در ویرایش رزومه فعال کنید.</p>
+                    {% endif %}
+                </div>
+
+                <div class="quick-profile-preview">
+                    <h4>{{ profile.display_name }}</h4>
+                    <p class="quick-meta">{{ profile.specialty|default:'تخصص مشخص نشده' }} · {{ profile.city|default:'شهر مشخص نشده' }}</p>
+                    <p class="quick-bio">{{ profile.biography|default:'هنوز متنی برای معرفی نوشته نشده است.'|truncatewords:25 }}</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- آرشیو نمونه‌کارهای تصویری و ویدئویی -->
+        <section class="art-panel">
+            <div class="panel-header-flex">
+                <div>
+                    <h2 class="panel-header-title">نمونه‌کارها و شو ریل‌ها</h2>
+                    <p class="panel-header-sub">فایل‌های ویدئویی و تصویری اختصاصی بارگذاری‌شده.</p>
+                </div>
+                <a class="btn btn-primary btn-sm" href="{% url 'upload' %}">+ افزودن نمونه‌کار جدید</a>
+            </div>
+
+            <div class="media-gallery-grid dashboard-media">
+                {% for item in profile.files.all %}
+                    <article class="media-card-frame media-card">
+                        <div class="media-viewport">
+                            {% if item.is_video %}
+                                <video controls preload="metadata" src="{% url 'media' item.pk %}"></video>
+                            {% else %}
+                                <img loading="lazy" src="{% url 'media' item.pk %}" alt="{{ item.title }}">
+                            {% endif %}
+                        </div>
+                        <div class="media-details">
+                            <h3 class="media-title">{{ item.title }}</h3>
+                            <div class="media-meta-row">
+                                <span class="file-size-tag">{{ item.size|filesizeformat }}</span>
+                                <form method="post" action="{% url 'delete-file' item.pk %}" class="inline-form">
+                                    {% csrf_token %}
+                                    <button class="delete-link-btn" type="submit">حذف فایل</button>
+                                </form>
+                            </div>
+                        </div>
+                    </article>
+                {% empty %}
+                    <div class="empty-media-box">
+                        <span class="empty-icon">📁</span>
+                        <h3>هنوز فایلی بارگذاری نکرده‌اید</h3>
+                        <p>تصاویر صحنه، شو ریل یا اتودهای بازیگری خود را در سقف سهمیه حسابتان اضافه کنید.</p>
+                        <a class="btn btn-outline btn-sm" href="{% url 'upload' %}">بارگذاری اولین فایل</a>
+                    </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- لینک آثار در پلتفرم‌ها -->
+        <section class="art-panel">
+            <div class="panel-header-flex">
+                <div>
+                    <h2 class="panel-header-title">پیوند به آثار در وب</h2>
+                    <p class="panel-header-sub">لینک صفحات جشنواره‌ها، یوتیوب، آپارات، فیلیمو و سایت‌های هنری.</p>
+                </div>
+                <a class="btn btn-outline btn-sm" href="{% url 'add-link' %}">+ افزودن پیوند جدید</a>
+            </div>
+
+            <div class="links-manage-list">
+                {% for link in profile.links.all %}
+                    <div class="link-manage-row link-row">
+                        <div class="link-info">
+                            <span class="link-name">{{ link.title }}</span>
+                            <a class="link-url-display" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.url }} ↗</a>
+                        </div>
+                        <form method="post" action="{% url 'delete-link' link.pk %}" class="inline-form">
+                            {% csrf_token %}
+                            <button class="delete-link-btn" type="submit">حذف</button>
+                        </form>
+                    </div>
+                {% empty %}
+                    <p class="muted-note">هیچ پیوندی برای آثار ثبت نشده است. افزودن لینک سهمیه‌ای از فضای فایل شما مصرف نمی‌کند.</p>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <!-- ستون جانبی: سهمیه و اشتراک‌ها -->
+    <aside class="dashboard-side-col">
+        <!-- کارت سهمیه فضا -->
+        <div class="art-panel storage-card storage-panel">
+            <h3 class="side-title">سهمیه فضای ذخیره‌سازی</h3>
+
+            <div class="storage-numbers">
+                <span class="storage-main">{{ used_mb|floatformat:2 }}</span>
+                <span class="storage-sub">از {{ quota_mb|floatformat:0 }} مگابایت</span>
+            </div>
+
+            <div class="progress-bar-container">
+                <div class="progress-bar-fill {% if over_quota %}over-quota{% endif %}" style="width: {{ usage_percent|stringformat:'f' }}%;"></div>
+            </div>
+
+            <div class="storage-meta-row">
+                <span>{{ remaining_mb|floatformat:2 }} مگابایت باقی‌مانده</span>
+                <span>{{ usage_percent|floatformat:0 }}٪ مصرف‌شده</span>
+            </div>
+
+            {% if over_quota %}
+                <div class="notice notice-danger">
+                    <strong>مصرف فعلی از سهمیه بیشتر است</strong>
+                    <p>فایل‌های قبلی شما حذف نخواهند شد، اما بارگذاری فایل تازه نیازمند آزادسازی فضا یا تهیه پلن فضای بیشتر است.</p>
+                </div>
+            {% endif %}
+
+            <div class="storage-actions">
+                <a class="btn btn-outline btn-sm btn-block" href="{% url 'plans' %}">افزایش فضای ذخیره‌سازی ←</a>
+            </div>
+
+            <small class="muted-note">سهمیه کل فعلی حساب شما {{ quota_mb|floatformat:0 }} مگابایت است؛ اشتراک مشاهده آن را افزایش نمی‌دهد.</small>
+        </div>
+
+        <!-- کارت وضعیت اشتراک مشاهده -->
+        <div class="art-panel access-card">
+            <h3 class="side-title">دسترسی به رزومه سایر هنرمندان</h3>
+
+            <div class="access-status-indicator">
+                {% if browse_active %}
+                    <span class="entitlement-badge active">✓ اشتراک مشاهده فعال است</span>
+                    <p class="access-desc">شما به تمامی رزومه‌های منتشرشده، آثار و فایل‌های سایر اعضا در بخش کشف دسترسی دارید.</p>
+                    <a class="btn btn-outline btn-sm btn-block" href="{% url 'directory' %}">ورود به بخش کشف هنرمندان</a>
+                {% else %}
+                    <span class="entitlement-badge inactive">✗ بدون اشتراک مشاهده</span>
+                    <p class="access-desc">برای جست‌وجو و مشاهده جزئیات و نمونه‌کارهای سایر هنرمندان، نیازمند اشتراک مشاهده می‌باشید.</p>
+                    <a class="btn btn-primary btn-sm btn-block" href="{% url 'plans' %}">تهیه اشتراک مشاهده ←</a>
+                {% endif %}
+            </div>
+
+            <div class="rule-reminder">
+                <small>یادآوری: اشتراک مشاهده و اشتراک فضا کاملاً مستقل از یکدیگرند.</small>
+            </div>
+        </div>
+
+
+<section class="art-panel invitation-panel" aria-labelledby="invitation-heading">
     <div class="section-title">
         <div><p class="eyebrow">دعوت از هنرمندان</p><h2 id="invitation-heading">لینک دعوت تو</h2></div>
         <strong>{{ invite_count }} دعوت</strong>
@@ -44,4 +218,6 @@
         {% endfor %}
     </ul>
 </section>
+    </aside>
+</div>
 {% endblock %}
