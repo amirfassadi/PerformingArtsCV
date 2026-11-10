@@ -18,6 +18,7 @@ from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
+VIDEO = b'\x00\x00\x00\x18ftypisomsynthetic-video'
 
 def run_manage(environment, *args):
     result = subprocess.run([sys.executable, 'manage.py', *args], cwd=ROOT, env=environment,
@@ -250,6 +251,34 @@ def main():
                         raise AssertionError('Uploaded image did not decode in the browser')
                     file_path = image.get_attribute('src')
                     profile_path = page.get_by_role('link', name='پیش‌نمایش رزومه').get_attribute('href')
+                    expect(page.locator('.storage-panel')).to_contain_text('100 مگابایت')
+                    page.goto(base + '/dashboard/upload/')
+                    page.locator('#id_title').fill('ویدئوی ساختگی')
+                    page.locator('#id_file').set_input_files({
+                        'name': 'sample.mp4',
+                        'mimeType': 'video/mp4',
+                        'buffer': VIDEO,
+                    })
+                    page.get_by_role('button', name='ذخیره', exact=True).click()
+                    expect(page.get_by_role('heading', name='ویدئوی ساختگی')).to_be_visible()
+                    video = page.locator('.media-card video')
+                    expect(video).to_be_visible()
+                    video_path = video.get_attribute('src')
+                    video_response = page.request.get(base + video_path)
+                    if video_response.status != 200 or video_response.headers.get('content-type') != 'video/mp4':
+                        raise AssertionError('Uploaded video was not delivered by the private media endpoint.')
+
+                    page.goto(base + '/dashboard/links/add/')
+                    page.locator('#id_title').fill('لینک نمونه‌کار ساختگی')
+                    page.locator('#id_url').fill('https://example.test/synthetic-work')
+                    page.get_by_role('button', name='ذخیره', exact=True).click()
+                    page.goto(base + '/dashboard/')
+                    external_link = page.locator('.link-row').filter(has_text='لینک نمونه‌کار ساختگی')
+                    if external_link.locator('a').get_attribute('href') != 'https://example.test/synthetic-work':
+                        raise AssertionError('The external work link did not preserve its validated URL.')
+                    external_link.get_by_role('button', name='حذف').click()
+                    expect(page.locator('body')).not_to_contain_text('لینک نمونه‌کار ساختگی')
+                    profile_path = page.get_by_role('link', name='پیش‌نمایش رزومه').get_attribute('href')
                     if screenshots:
                         page.screenshot(path=str(screenshots / 'dashboard-desktop.png'), full_page=True)
                     logout()
@@ -291,6 +320,9 @@ def main():
                     expect(page.get_by_role('heading', name='بازیگر آزمایشی', exact=True)).to_be_visible()
                     assert page.request.get(base + profile_path).status == 200
                     assert page.request.get(base + file_path).status == 200
+                    video_response = page.request.get(base + video_path)
+                    if video_response.status != 200 or video_response.headers.get('content-type') != 'video/mp4':
+                        raise AssertionError('Viewer could not access the published video with an active grant.')
                     page.get_by_role('button', name='+ افزودن به منتخب‌ها').click()
                     expect(page.get_by_role('button', name='حذف از منتخب‌ها')).to_be_visible()
                     page.get_by_role('button', name='حذف از منتخب‌ها').click()
@@ -314,6 +346,7 @@ def main():
                     page.locator('#id_published').uncheck()
                     page.get_by_role('button', name='ذخیره', exact=True).click()
                     expect(page.locator('body')).to_contain_text('پیش‌نویس')
+                    assert page.request.get(base + file_path).status == 200
                     logout()
                     login('qa_viewer', viewer_password)
                     assert page.request.get(base + profile_path).status == 403
@@ -330,8 +363,22 @@ def main():
                     run_manage(environment, 'shell', '-c',
                         "from portfolio.models import Favorite,PortfolioFile; "
                         "assert Favorite.objects.filter(user__username='qa_viewer').exists(); "
+                        "assert PortfolioFile.objects.count()==2; "
+                        "assert all(f.file.storage.exists(f.file.name) for f in PortfolioFile.objects.all())")
+                    logout()
+                    login('qa_artist', artist_password)
+                    page.goto(base + '/dashboard/')
+                    page.locator('.media-card').filter(has_text='ویدئوی ساختگی').get_by_role(
+                        'button', name='حذف فایل',
+                    ).click()
+                    run_manage(environment, 'shell', '-c',
+                        "from portfolio.models import PortfolioFile; "
+                        "from django.conf import settings; "
                         "assert PortfolioFile.objects.count()==1; "
-                        "f=PortfolioFile.objects.get(); assert f.file.storage.exists(f.file.name)")
+                        "assert all(f.file.storage.exists(f.file.name) for f in PortfolioFile.objects.all()); "
+                        "assert len([path for path in settings.MEDIA_ROOT.rglob('*') if path.is_file()])==1")
+                    assert page.request.get(base + file_path).status == 200
+                    assert page.request.get(base + video_path).status == 404
                     if errors:
                         raise AssertionError('\n'.join(errors))
                 except BaseException as error:
@@ -360,7 +407,7 @@ def main():
                 "assert Profile.objects.count()==3; assert Invitation.objects.count()==2; "
                 "assert InvitationLink.objects.count()==3; f=PortfolioFile.objects.get(); "
                 "assert f.file.open('rb').read(8)==b'\\x89PNG\\r\\n\\x1a\\n'")
-            print(f'PASS: invited browser signup, invitation copy ({copy_result}), dashboard/privacy/deactivation, profile edit, private upload, paywall, paid browsing, favorites, mobile, backup and restored data.')
+            print(f'PASS: invited browser signup, invitation copy ({copy_result}), dashboard/privacy/deactivation, profile edit, private image/video and external-link lifecycle, paywall, paid browsing, favorites, mobile, backup and restored data.')
         finally:
             primary_error = sys.exc_info()[1]
             steps = []

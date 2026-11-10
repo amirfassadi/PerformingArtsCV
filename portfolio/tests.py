@@ -21,7 +21,7 @@ from .access import can_browse, storage_quota, storage_used
 from .billing import start_payment, verify_payment
 from .forms import UploadForm
 from .gateway import GatewayError, Zarinpal
-from .models import MB, Entitlement, Favorite, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings
+from .models import MB, Entitlement, Favorite, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
 from .services import add_file
 
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
@@ -422,6 +422,116 @@ class ProductTests(TestCase):
         self.assertEqual(storage_used(self.artist), len(PNG))
         self.assertTrue(Path(item.file.path).is_file())
         self.assertEqual(self.client.get('/never-public/' + item.file.name).status_code, 404)
+        self.assertEqual(self.client.get('/media/' + item.file.name).status_code, 404)
+        dashboard = self.client.get(reverse('dashboard'))
+        self.assertEqual(dashboard.context['quota_mb'], 100)
+        self.assertEqual(dashboard.context['used_mb'], len(PNG) / MB)
+
+    def test_allowed_file_signatures_and_rejected_extension_mismatch(self):
+        samples = [
+            ('sample.jpg', b'\xff\xd8\xffsynthetic', 'image/jpeg'),
+            ('sample.jpeg', b'\xff\xd8\xffsynthetic', 'image/jpeg'),
+            ('sample.png', PNG, 'image/png'),
+            ('sample.webp', b'RIFF\x00\x00\x00\x00WEBPsynthetic', 'image/webp'),
+            ('sample.mp4', b'\x00\x00\x00\x18ftypisomsynthetic', 'video/mp4'),
+            ('sample.webm', b'\x1aE\xdf\xa3synthetic', 'video/webm'),
+        ]
+        for filename, payload, content_type in samples:
+            with self.subTest(filename=filename):
+                form = UploadForm(
+                    {'title': 'synthetic'},
+                    {'file': SimpleUploadedFile(filename, payload, 'application/octet-stream')},
+                )
+                self.assertTrue(form.is_valid(), form.errors)
+                self.assertEqual(form.cleaned_data['file'].detected_content_type, content_type)
+
+        invalid = UploadForm(
+            {'title': 'synthetic'},
+            {'file': SimpleUploadedFile('sample.png', b'\xff\xd8\xffsynthetic', 'image/png')},
+        )
+        self.assertFalse(invalid.is_valid())
+        self.assertIn('file', invalid.errors)
+
+    def test_external_work_links_do_not_consume_storage(self):
+        WorkLink.objects.create(profile=self.artist, title='نمونه ساختگی', url='https://example.test/work')
+        self.assertEqual(storage_used(self.artist), 0)
+
+    def test_video_upload_is_rendered_and_served_as_private_video(self):
+        uploaded = SimpleUploadedFile(
+            'sample.mp4',
+            b'\x00\x00\x00\x18ftypisomsynthetic-video',
+            'application/octet-stream',
+        )
+        form = UploadForm({'title': 'ویدئوی ساختگی'}, {'file': uploaded})
+        self.assertTrue(form.is_valid(), form.errors)
+        item = add_file(self.artist, form.cleaned_data['file'], 'ویدئوی ساختگی')
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse('profile', args=[self.artist.pk]))
+        self.assertContains(response, '<video controls preload="metadata"', html=False)
+        self.assertContains(response, 'ویدئوی ساختگی')
+        media_response = self.client.get(reverse('media', args=[item.pk]))
+        self.assertEqual(media_response.status_code, 200)
+        self.assertEqual(media_response['Content-Type'], 'video/mp4')
+        self.assertEqual(b''.join(media_response.streaming_content), b'\x00\x00\x00\x18ftypisomsynthetic-video')
+        media_response.close()
+
+    def test_external_work_link_can_be_added_and_removed_without_storage_use(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(reverse('add-link'), {
+            'title': 'اثر پیوندی ساختگی',
+            'url': 'https://example.test/synthetic-work',
+        })
+        self.assertEqual(response.status_code, 302)
+        link = WorkLink.objects.get(profile=self.artist)
+        self.assertContains(self.client.get(reverse('dashboard')), 'اثر پیوندی ساختگی')
+        self.assertContains(self.client.get(reverse('profile', args=[self.artist.pk])), 'اثر پیوندی ساختگی')
+        self.assertEqual(storage_used(self.artist), 0)
+
+        response = self.client.post(reverse('delete-link', args=[link.pk]))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(WorkLink.objects.filter(pk=link.pk).exists())
+        self.assertEqual(storage_used(self.artist), 0)
+
+    def test_media_audit_reports_missing_untracked_and_size_mismatch_without_deleting(self):
+        self.upload()
+        missing_record = PortfolioFile.objects.order_by('created_at').first()
+        missing_path = Path(missing_record.file.path)
+        self.upload()
+        mismatched_record = PortfolioFile.objects.exclude(pk=missing_record.pk).first()
+        self.upload()
+        intact_record = PortfolioFile.objects.exclude(
+            pk__in=[missing_record.pk, mismatched_record.pk],
+        ).get()
+        PortfolioFile.objects.filter(pk=mismatched_record.pk).update(size=len(PNG) + 1)
+        missing_path.unlink()
+        orphan_path = Path(self.media.name) / 'untracked-synthetic.bin'
+        orphan_path.write_bytes(b'synthetic orphan')
+
+        output = io.StringIO()
+        with self.assertRaises(CommandError):
+            call_command('audit_portfolio_media', stdout=output)
+        report = output.getvalue()
+        self.assertIn('1 missing, 1 untracked, 1 size mismatch(es)', report)
+        self.assertIn(f'MISSING record={missing_record.pk}', report)
+        self.assertIn('UNTRACKED name=untracked-synthetic.bin', report)
+        self.assertIn(f'SIZE_MISMATCH record={mismatched_record.pk}', report)
+        self.assertFalse(missing_path.exists())
+        self.assertTrue(orphan_path.is_file())
+        self.assertTrue(Path(intact_record.file.path).is_file())
+        self.assertEqual(PortfolioFile.objects.count(), 3)
+        self.assertEqual(PortfolioFile.objects.get(pk=mismatched_record.pk).size, len(PNG) + 1)
+
+    def test_media_audit_reports_clean_store_without_changes(self):
+        self.upload()
+        output = io.StringIO()
+        call_command('audit_portfolio_media', stdout=output)
+        self.assertIn('No discrepancies found; no data was changed.', output.getvalue())
+
+    def test_media_audit_handles_an_uncreated_empty_storage_root(self):
+        Path(self.media.name).rmdir()
+        output = io.StringIO()
+        call_command('audit_portfolio_media', stdout=output)
+        self.assertIn('0 database records, 0 stored files, 0 missing', output.getvalue())
 
     def test_reject_upload_when_quota_full_without_saving_file(self):
         SiteSettings.objects.filter(pk=1).update(free_storage_mb=0)
@@ -440,11 +550,13 @@ class ProductTests(TestCase):
     def test_streaming_limit_rejects_large_upload(self):
         self.assertContains(self.upload(), 'حجم فایل از سقف مجاز')
         self.assertFalse(PortfolioFile.objects.exists())
+        self.assertEqual(list(Path(self.media.name).rglob('*.*')), [])
 
     def test_fake_image_and_html_rejected(self):
         response = self.upload(payload=b'<html>not an image</html>')
         self.assertContains(response, 'فایل معتبر')
         self.assertFalse(PortfolioFile.objects.exists())
+        self.assertEqual(list(Path(self.media.name).rglob('*.*')), [])
 
     def test_disk_write_is_cleaned_when_database_save_fails(self):
         form = UploadForm({'title': 'test'}, {'file': SimpleUploadedFile('a.png', PNG)})
@@ -500,6 +612,32 @@ class ProductTests(TestCase):
         self.assertEqual(response.status_code, 200)
         response.close()
         self.assertContains(self.client.get(reverse('dashboard')), 'مصرف فعلی از سهمیه بیشتر است')
+
+    def test_storage_entitlement_expiry_keeps_existing_files_and_blocks_new_ones(self):
+        SiteSettings.objects.filter(pk=1).update(free_storage_mb=0)
+        now = timezone.now()
+        grant = self.grant(
+            user=self.owner,
+            kind='storage',
+            storage_mb=1,
+            starts_at=now - timedelta(days=2),
+            ends_at=now + timedelta(days=1),
+        )
+        self.assertEqual(self.upload().status_code, 302)
+        item = PortfolioFile.objects.get()
+        path = Path(item.file.path)
+        Entitlement.objects.filter(pk=grant.pk).update(
+            starts_at=now - timedelta(days=2),
+            ends_at=now - timedelta(seconds=1),
+        )
+        self.assertEqual(storage_quota(self.owner), 0)
+        response = self.client.get(reverse('media', args=[item.pk]))
+        self.assertEqual(response.status_code, 200)
+        response.close()
+        self.assertContains(self.upload(), 'فضای کافی ندارید')
+        self.assertTrue(path.is_file())
+        self.assertTrue(PortfolioFile.objects.filter(pk=item.pk).exists())
+        self.assertEqual(PortfolioFile.objects.count(), 1)
 
     def test_csrf_is_required_for_upload(self):
         client = Client(enforce_csrf_checks=True)
