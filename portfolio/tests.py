@@ -15,6 +15,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth.models import Permission, User
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -1180,6 +1181,21 @@ class RateLimitConcurrencyTests(TransactionTestCase):
         self.assertEqual(RequestThrottle.objects.get().attempts, sum(results))
 
 class BackupValidationTests(TestCase):
+    @override_settings(HEALTHCHECK_MIN_FREE_BYTES=1)
+    @patch('portfolio.management.commands.healthcheck.shutil.disk_usage')
+    def test_healthcheck_reports_database_media_and_disk(self, disk_usage):
+        disk_usage.return_value = type('Usage', (), {'free': 1024})()
+        output = io.StringIO()
+        call_command('healthcheck', stdout=output)
+        self.assertIn('Healthcheck passed', output.getvalue())
+
+    @override_settings(HEALTHCHECK_MIN_FREE_BYTES=999999999999999)
+    @patch('portfolio.management.commands.healthcheck.shutil.disk_usage')
+    def test_healthcheck_rejects_low_disk(self, disk_usage):
+        disk_usage.return_value = type('Usage', (), {'free': 1})()
+        with self.assertRaises(CommandError):
+            call_command('healthcheck')
+
     def test_corrupted_backup_is_rejected(self):
         from .management.commands.backup_site import digest
         with tempfile.TemporaryDirectory() as folder:
@@ -1198,3 +1214,23 @@ class BackupValidationTests(TestCase):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaises(CommandError):
                 call_command('backup_site', folder)
+
+    def test_secondary_backup_publishes_only_a_verified_snapshot(self):
+        owner = User.objects.create_user('backup-owner', password='Backup-strong-password!')
+        profile = Profile.objects.create(user=owner, display_name='Backup artist', published=True)
+        payload = b'synthetic-private-media'
+        portfolio_file = PortfolioFile(
+            profile=profile,
+            title='Backup media',
+            size=len(payload),
+            content_type='application/octet-stream',
+        )
+        portfolio_file.file.save('backup.bin', ContentFile(payload), save=True)
+        with tempfile.TemporaryDirectory() as folder:
+            call_command('backup_to_secondary', folder, stdout=io.StringIO())
+            snapshots = [
+                path for path in Path(folder).iterdir()
+                if path.is_dir() and not path.name.startswith('.staging-')
+            ]
+            self.assertEqual(len(snapshots), 1)
+            call_command('verify_backup', snapshots[0], stdout=io.StringIO())

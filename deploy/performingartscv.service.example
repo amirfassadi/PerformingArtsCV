@@ -1,0 +1,20 @@
+[Unit]
+Description=PerformingArtsCV Django application
+After=network.target
+
+[Service]
+Type=simple
+User=performingartscv
+Group=performingartscv
+WorkingDirectory=/srv/performingartscv/app
+EnvironmentFile=/etc/performingartscv/performingartscv.env
+ExecStart=/srv/performingartscv/venv/bin/python -m waitress --listen=127.0.0.1:8000 config.wsgi:application
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/srv/performingartscv/data /srv/performingartscv/private-media
+
+[Install]
+WantedBy=multi-user.target
