@@ -208,14 +208,37 @@ def main():
                     else:
                         raise AssertionError(f'Unexpected copy result: {copy_status.inner_text()!r}')
 
+                    profile_path = page.get_by_role('link', name='پیش‌نمایش رزومه').get_attribute('href')
+                    page.goto(base + profile_path)
+                    expect(page.get_by_text('این رزومه پیش‌نویس است؛ فقط خودت می‌توانی آن را ببینی.')).to_be_visible()
+                    expect(page.get_by_role('heading', name='بازیگر آزمایشی')).to_have_count(0)
+
                     page.goto(base + '/dashboard/edit/')
                     page.locator('#id_display_name').fill('بازیگر آزمایشی')
                     page.locator('#id_city').fill('تهران')
                     page.locator('#id_specialty').fill('بازیگر تئاتر')
                     page.locator('#id_skills').fill('بداهه‌پردازی، بیان و حرکت')
-                    page.locator('#id_biography').fill('این رزومه فقط برای بررسی عملکرد نسخه اولیه ساخته شده است.')
+                    page.locator('#id_biography').fill(
+                        "<script>document.body.dataset.synthetic='executed'</script>",
+                    )
+                    page.locator('#id_experience').fill('اجرای آزمایشی')
+                    page.locator('#id_contact').fill('public-studio@example.test')
                     page.locator('#id_published').check()
                     page.get_by_role('button', name='ذخیره', exact=True).click()
+                    expect(page.locator('body')).to_contain_text('قابل مشاهده برای مشترکان')
+                    page.goto(base + profile_path)
+                    expect(page.get_by_role('heading', name='بازیگر آزمایشی', exact=True)).to_be_visible()
+                    expect(page.locator('.prose').first).to_contain_text(
+                        "<script>document.body.dataset.synthetic='executed'</script>",
+                    )
+                    if page.locator('script').count() or page.evaluate(
+                        "document.body.dataset.synthetic === 'executed'",
+                    ):
+                        raise AssertionError('Profile text was executed as HTML/script.')
+                    if 'qa_artist@example.test' in page.locator('body').inner_text():
+                        raise AssertionError('Private account email appeared on the profile.')
+                    expect(page.locator('body')).to_contain_text('public-studio@example.test')
+
                     page.goto(base + '/dashboard/upload/')
                     page.locator('#id_title').fill('نمونه‌کار آزمایشی')
                     page.locator('#id_file').set_input_files({'name': 'sample.png', 'mimeType': 'image/png', 'buffer': PNG})
@@ -263,12 +286,20 @@ def main():
                         "from django.utils import timezone; from datetime import timedelta; "
                         "Entitlement.objects.create(user=User.objects.get(username='qa_viewer'),kind='browse',"
                         "ends_at=timezone.now()+timedelta(days=1),reference='isolated-browser-qa')")
-                    assert page.goto(base + '/artists/?q=بازیگر').status == 200
+                    assert page.goto(base + '/artists/?q=بازیگر&city=تهران').status == 200
                     page.get_by_role('link').filter(has_text='بازیگر آزمایشی').click()
                     expect(page.get_by_role('heading', name='بازیگر آزمایشی', exact=True)).to_be_visible()
+                    assert page.request.get(base + profile_path).status == 200
                     assert page.request.get(base + file_path).status == 200
                     page.get_by_role('button', name='+ افزودن به منتخب‌ها').click()
                     expect(page.get_by_role('button', name='حذف از منتخب‌ها')).to_be_visible()
+                    page.get_by_role('button', name='حذف از منتخب‌ها').click()
+                    expect(page.get_by_role('button', name='+ افزودن به منتخب‌ها')).to_be_visible()
+                    page.get_by_role('button', name='+ افزودن به منتخب‌ها').click()
+                    assert page.goto(base + '/artists/?favorites=1').status == 200
+                    expect(page.get_by_role('link').filter(has_text='بازیگر آزمایشی')).to_be_visible()
+                    assert page.goto(base + '/artists/?q=هیچ‌کس&city=شیراز').status == 200
+                    expect(page.get_by_text('رزومه‌ای پیدا نشد')).to_be_visible()
                     page.set_viewport_size({'width': 390, 'height': 844})
                     page.goto(base + '/artists/')
                     expect(page.get_by_role('heading', name='بازیگر آزمایشی', exact=True)).to_be_visible()
@@ -277,6 +308,30 @@ def main():
                         page.screenshot(path=str(screenshots / 'directory-mobile.png'), full_page=True)
                     page.goto(base + profile_path)
                     assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+                    logout()
+                    login('qa_artist', artist_password)
+                    page.goto(base + '/dashboard/edit/')
+                    page.locator('#id_published').uncheck()
+                    page.get_by_role('button', name='ذخیره', exact=True).click()
+                    expect(page.locator('body')).to_contain_text('پیش‌نویس')
+                    logout()
+                    login('qa_viewer', viewer_password)
+                    assert page.request.get(base + profile_path).status == 403
+                    assert page.request.get(base + file_path).status == 403
+                    assert page.goto(base + '/artists/?favorites=1').status == 200
+                    expect(page.get_by_text('رزومه‌ای پیدا نشد')).to_be_visible()
+                    run_manage(environment, 'shell', '-c',
+                        "from django.contrib.auth.models import User; from django.utils import timezone; "
+                        "from portfolio.models import Entitlement,Favorite,PortfolioFile; "
+                        "Entitlement.objects.filter(user__username='qa_viewer',kind='browse').update(ends_at=timezone.now())")
+                    assert page.request.get(base + profile_path).status == 403
+                    assert page.request.get(base + file_path).status == 403
+                    assert page.goto(base + '/artists/?favorites=1').status == 403
+                    run_manage(environment, 'shell', '-c',
+                        "from portfolio.models import Favorite,PortfolioFile; "
+                        "assert Favorite.objects.filter(user__username='qa_viewer').exists(); "
+                        "assert PortfolioFile.objects.count()==1; "
+                        "f=PortfolioFile.objects.get(); assert f.file.storage.exists(f.file.name)")
                     if errors:
                         raise AssertionError('\n'.join(errors))
                 except BaseException as error:

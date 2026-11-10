@@ -21,7 +21,7 @@ from .access import can_browse, storage_quota, storage_used
 from .billing import start_payment, verify_payment
 from .forms import UploadForm
 from .gateway import GatewayError, Zarinpal
-from .models import MB, Entitlement, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings
+from .models import MB, Entitlement, Favorite, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings
 from .services import add_file
 
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
@@ -43,10 +43,14 @@ class ProductTests(TestCase):
         self.addCleanup(self.override.disable)
 
     def grant(self, user=None, kind='browse', **kwargs):
-        return Entitlement.objects.create(
-            user=user or self.viewer, kind=kind, reference='test',
-            ends_at=timezone.now() + timedelta(days=1), **kwargs,
-        )
+        values = {
+            'user': user or self.viewer,
+            'kind': kind,
+            'reference': 'test',
+            'ends_at': timezone.now() + timedelta(days=1),
+        }
+        values.update(kwargs)
+        return Entitlement.objects.create(**values)
 
     def upload(self, user=None, payload=PNG):
         self.client.force_login(user or self.owner)
@@ -62,6 +66,7 @@ class ProductTests(TestCase):
         self.assertRedirects(response, reverse('dashboard'))
         user = User.objects.get(username='new-artist')
         self.assertEqual(Profile.objects.filter(user=user).count(), 1)
+        self.assertFalse(user.profile.published)
         invitation = Invitation.objects.get(invitee=user)
         self.assertEqual(invitation.inviter, self.owner)
         self.assertEqual(invitation.link, self.owner.invitation_link)
@@ -215,9 +220,35 @@ class ProductTests(TestCase):
         self.client.force_login(self.viewer)
         response = self.client.get(reverse('directory'), {'q': 'بازیگر', 'city': 'تهران'})
         self.assertContains(response, self.artist.display_name)
+        self.assertContains(self.client.get(reverse('directory'), {'q': 'هیچ‌کس'}), 'رزومه‌ای پیدا نشد')
         self.assertContains(self.client.get(reverse('profile', args=[self.artist.pk])), self.artist.display_name)
         self.assertEqual(self.client.post(reverse('favorite', args=[self.artist.pk])).status_code, 302)
+        self.assertEqual(Favorite.objects.filter(user=self.viewer, profile=self.artist).count(), 1)
+        self.assertEqual(self.client.post(reverse('favorite', args=[self.artist.pk])).status_code, 302)
+        self.assertFalse(Favorite.objects.filter(user=self.viewer, profile=self.artist).exists())
+        self.client.post(reverse('favorite', args=[self.artist.pk]))
+        other_viewer = User.objects.create_user('other-viewer')
+        self.grant(user=other_viewer)
+        other_client = Client()
+        other_client.force_login(other_viewer)
+        self.assertEqual(other_client.post(reverse('favorite', args=[self.artist.pk])).status_code, 302)
+        self.assertEqual(Favorite.objects.filter(profile=self.artist).count(), 2)
+        self.client.post(reverse('favorite', args=[self.artist.pk]))
+        self.assertEqual(Favorite.objects.filter(profile=self.artist).count(), 1)
+        self.assertTrue(Favorite.objects.filter(user=other_viewer, profile=self.artist).exists())
+        self.client.post(reverse('favorite', args=[self.artist.pk]))
+        self.assertEqual(Favorite.objects.filter(profile=self.artist).count(), 2)
         self.assertContains(self.client.get(reverse('directory'), {'favorites': '1'}), self.artist.display_name)
+        self.artist.published = False
+        self.artist.save(update_fields=['published'])
+        self.assertNotContains(self.client.get(reverse('directory'), {'favorites': '1'}), self.artist.display_name)
+        self.assertEqual(self.client.get(reverse('profile', args=[self.artist.pk])).status_code, 403)
+        expired_at = timezone.now() - timedelta(seconds=1)
+        Entitlement.objects.filter(user=self.viewer).update(
+            starts_at=expired_at - timedelta(days=1),
+            ends_at=expired_at,
+        )
+        self.assertEqual(self.client.get(reverse('directory'), {'favorites': '1'}).status_code, 403)
 
     def test_paid_viewer_cannot_read_draft(self):
         self.grant()
@@ -250,6 +281,128 @@ class ProductTests(TestCase):
         self.client.post(reverse('edit-profile'), {'display_name': 'نام جدید', 'user': self.owner.pk})
         self.artist.refresh_from_db()
         self.assertEqual(self.artist.display_name, 'هنرمند آزمایشی')
+
+    def test_profile_edit_validates_saves_and_escapes_private_content(self):
+        self.owner.email = 'private-account@example.test'
+        self.owner.save(update_fields=['email'])
+        self.client.force_login(self.owner)
+        response = self.client.post(reverse('edit-profile'), {
+            'display_name': 'هنرمند ویرایش‌شده',
+            'city': 'شیراز',
+            'specialty': 'بازیگری',
+            'skills': 'بیان، حرکت',
+            'biography': "<script>document.body.dataset.synthetic='executed'</script>",
+            'experience': 'اجرای آزمایشی',
+            'contact': 'studio@example.test',
+            'published': 'on',
+        })
+        self.assertRedirects(response, reverse('dashboard'))
+        self.artist.refresh_from_db()
+        self.assertEqual(self.artist.display_name, 'هنرمند ویرایش‌شده')
+        self.assertEqual(self.artist.city, 'شیراز')
+        self.assertEqual(self.artist.specialty, 'بازیگری')
+        self.assertEqual(self.artist.skills, 'بیان، حرکت')
+        self.assertEqual(
+            self.artist.biography,
+            "<script>document.body.dataset.synthetic='executed'</script>",
+        )
+        self.assertEqual(self.artist.experience, 'اجرای آزمایشی')
+        self.assertEqual(self.artist.contact, 'studio@example.test')
+        self.assertTrue(self.artist.published)
+
+        profile_path = reverse('profile', args=[self.artist.pk])
+        response = self.client.get(profile_path)
+        self.assertContains(response, '&lt;script&gt;')
+        self.assertNotContains(response, "<script>document.body.dataset.synthetic='executed'</script>")
+        self.assertContains(response, 'studio@example.test')
+        self.assertNotContains(response, 'private-account@example.test')
+
+        response = self.client.post(reverse('edit-profile'), {
+            'display_name': '',
+            'city': 'شیراز',
+            'specialty': 'بازیگری',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['form'].errors['display_name'])
+        self.artist.refresh_from_db()
+        self.assertEqual(self.artist.display_name, 'هنرمند ویرایش‌شده')
+        self.assertTrue(self.artist.published)
+
+    def test_profile_and_private_file_access_matrix(self):
+        self.upload()
+        item = PortfolioFile.objects.get()
+        profile_path = reverse('profile', args=[self.artist.pk])
+        file_path = reverse('media', args=[item.pk])
+
+        self.client.logout()
+        self.assertEqual(self.client.get(profile_path).status_code, 302)
+        self.assertEqual(self.client.get(file_path).status_code, 302)
+
+        self.client.force_login(self.owner)
+        self.assertEqual(self.client.get(profile_path).status_code, 200)
+        owner_file = self.client.get(file_path)
+        self.assertEqual(owner_file.status_code, 200)
+        owner_file.close()
+
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(profile_path).status_code, 403)
+        self.assertEqual(self.client.get(file_path).status_code, 403)
+        self.assertEqual(self.client.get(reverse('directory')).status_code, 403)
+
+        self.grant(kind='storage', storage_mb=500)
+        self.assertEqual(storage_quota(self.viewer), 500 * MB)
+        self.assertEqual(self.client.get(profile_path).status_code, 403)
+        self.assertEqual(self.client.get(file_path).status_code, 403)
+        self.assertEqual(self.client.get(reverse('directory')).status_code, 403)
+
+        self.grant(kind='browse')
+        self.assertEqual(storage_quota(self.viewer), 500 * MB)
+        self.assertEqual(self.client.get(profile_path).status_code, 200)
+        viewer_file = self.client.get(file_path)
+        self.assertEqual(viewer_file.status_code, 200)
+        viewer_file.close()
+        self.assertEqual(self.client.get(reverse('directory')).status_code, 200)
+
+    def test_profile_and_file_urls_recheck_expired_revoked_and_future_access(self):
+        self.upload()
+        item = PortfolioFile.objects.get()
+        profile_path = reverse('profile', args=[self.artist.pk])
+        file_path = reverse('media', args=[item.pk])
+        now = timezone.now()
+        grant = self.grant(
+            starts_at=now - timedelta(seconds=1),
+            ends_at=now + timedelta(seconds=30),
+        )
+        self.client.force_login(self.viewer)
+
+        with patch('portfolio.access.timezone.now', return_value=now):
+            self.assertEqual(self.client.get(profile_path).status_code, 200)
+            response = self.client.get(file_path)
+            self.assertEqual(response.status_code, 200)
+            response.close()
+
+        denied_states = [
+            ({'ends_at': now}, now),
+            ({'ends_at': now + timedelta(hours=1), 'revoked': True}, now),
+            ({
+                'starts_at': now + timedelta(seconds=1),
+                'ends_at': now + timedelta(hours=1),
+                'revoked': False,
+            }, now),
+        ]
+        for updates, checked_at in denied_states:
+            Entitlement.objects.filter(pk=grant.pk).update(**updates)
+            with patch('portfolio.access.timezone.now', return_value=checked_at):
+                self.assertEqual(self.client.get(profile_path).status_code, 403)
+                self.assertEqual(self.client.get(file_path).status_code, 403)
+
+        self.assertTrue(Path(item.file.path).is_file())
+        self.assertTrue(PortfolioFile.objects.filter(pk=item.pk).exists())
+        self.client.force_login(self.owner)
+        self.assertEqual(self.client.get(profile_path).status_code, 200)
+        owner_file = self.client.get(file_path)
+        self.assertEqual(owner_file.status_code, 200)
+        owner_file.close()
 
     def test_free_quota_updates_existing_accounts_immediately(self):
         config = SiteSettings.current()
