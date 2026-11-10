@@ -1,2 +1,4 @@
 Django==5.2.19
 waitress==3.0.2
+Pillow==13.0.0
+av==19.0.2

@@ -25,9 +25,14 @@ from .billing import start_payment, verify_payment
 from .forms import UploadForm
 from .gateway import GatewayError, Zarinpal
 from .models import MB, Entitlement, Favorite, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
+from .media_validation import MediaDecoderUnavailable
 from .services import add_file
 
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==')
+
+
+def mp4_box(kind, payload=b''):
+    return struct.pack('>I', len(payload) + 8) + kind + payload
 
 
 def png_chunk(kind, payload):
@@ -467,6 +472,28 @@ class ProductTests(TestCase):
     def test_rejects_truncated_and_malformed_media_without_saving(self):
         malformed_png = bytearray(PNG)
         malformed_png[29] ^= 0x01
+        malformed_webp = (
+            b'RIFF' + struct.pack('<I', 22) + b'WEBPVP8 ' + struct.pack('<I', 10)
+            + bytes.fromhex('0000009d012a01000100')
+        )
+        empty_tables = b''.join(
+            mp4_box(tag) for tag in (b'stsd', b'stts', b'stsc', b'stsz', b'stco')
+        )
+        malformed_mp4 = (
+            mp4_box(b'ftyp', b'isom\0\0\0\0')
+            + mp4_box(b'mdat', b'not-video')
+            + mp4_box(
+                b'moov',
+                mp4_box(
+                    b'trak',
+                    mp4_box(
+                        b'mdia',
+                        mp4_box(b'hdlr', b'\0' * 8 + b'vide')
+                        + mp4_box(b'minf', mp4_box(b'stbl', empty_tables)),
+                    ),
+                ),
+            )
+        )
         invalid_files = (
             ('work.png', PNG[:8]),
             ('work.png', PNG[:-5]),
@@ -475,7 +502,9 @@ class ProductTests(TestCase):
             ('work.png', b'\x89PNG\r\n\x1a\n' + b'\x00' * 24),
             ('work.jpg', b'\xff\xd8\xff'),
             ('work.webp', b'RIFF\x00\x00\x00\x00WEBP'),
+            ('work.webp', malformed_webp),
             ('work.mp4', b'\x00\x00\x00\x18ftyp'),
+            ('work.mp4', malformed_mp4),
             ('work.webm', b'\x1aE\xdf\xa3\x9f'),
         )
         for filename, payload in invalid_files:
@@ -485,6 +514,12 @@ class ProductTests(TestCase):
                 self.assertFalse(PortfolioFile.objects.exists())
                 self.assertEqual(storage_used(self.artist), 0)
                 self.assertEqual(list(Path(self.media.name).rglob('*.*')), [])
+
+    def test_missing_image_decoder_has_an_explicit_configuration_error(self):
+        uploaded = SimpleUploadedFile('sample.png', PNG, 'image/png')
+        with patch.dict('sys.modules', {'PIL': None}):
+            with self.assertRaisesRegex(MediaDecoderUnavailable, 'Pillow is required'):
+                UploadForm({'title': 'synthetic'}, {'file': uploaded}).is_valid()
 
     def test_external_work_link_can_be_added_and_removed_without_storage_use(self):
         self.client.force_login(self.owner)

@@ -1,3 +1,4 @@
+import io
 import binascii
 import struct
 import zlib
@@ -17,6 +18,10 @@ class InvalidMedia(ValueError):
     pass
 
 
+class MediaDecoderUnavailable(RuntimeError):
+    pass
+
+
 def validate_media(payload, suffix):
     if suffix in IMAGE_TYPES:
         content_type, kind = IMAGE_TYPES[suffix]
@@ -28,9 +33,72 @@ def validate_media(payload, suffix):
         raise InvalidMedia
     try:
         validators[kind](payload)
+        if kind in ('jpeg', 'png', 'webp'):
+            _decode_image(payload, content_type)
+        else:
+            _decode_video(payload)
     except (InvalidMedia, IndexError, OverflowError, struct.error, zlib.error):
         raise InvalidMedia from None
     return content_type
+
+
+def _decode_image(payload, expected_content_type):
+    try:
+        from PIL import Image, UnidentifiedImageError, features
+    except ImportError as error:
+        raise MediaDecoderUnavailable(
+            'Pillow is required to validate uploaded images; install the declared runtime requirements.',
+        ) from error
+
+    expected_format = {
+        'image/jpeg': 'JPEG',
+        'image/png': 'PNG',
+        'image/webp': 'WEBP',
+    }[expected_content_type]
+    if expected_format == 'WEBP' and not features.check('webp'):
+        raise MediaDecoderUnavailable('The installed Pillow build does not include WebP decoding support.')
+    try:
+        with Image.open(io.BytesIO(payload)) as image:
+            if image.format != expected_format:
+                raise InvalidMedia
+            width, height = image.size
+            _dimensions(width, height)
+            if width * height * len(image.getbands()) > MAX_IMAGE_DECODED_BYTES:
+                raise InvalidMedia
+            image.load()
+    except (Image.DecompressionBombError, OSError, SyntaxError, UnidentifiedImageError, ValueError):
+        raise InvalidMedia from None
+
+
+def _decode_video(payload):
+    try:
+        import av
+    except ImportError as error:
+        raise MediaDecoderUnavailable(
+            'PyAV is required to decode uploaded video; install the declared runtime requirements.',
+        ) from error
+
+    try:
+        with av.open(io.BytesIO(payload), mode='r') as container:
+            video_streams = container.streams.video
+            if not video_streams:
+                raise InvalidMedia
+            stream = video_streams[0]
+            codec = stream.codec_context
+            _video_frame_size(codec.width, codec.height)
+            codec.thread_count = 1
+            frame = next(container.decode(stream), None)
+            if frame is None or frame.is_corrupt:
+                raise InvalidMedia
+            _video_frame_size(frame.width, frame.height)
+    except (av.error.FFmpegError, EOFError, OSError, ValueError):
+        raise InvalidMedia from None
+
+
+def _video_frame_size(width, height):
+    _dimensions(width, height)
+    if width * height * 4 > MAX_IMAGE_DECODED_BYTES:
+        raise InvalidMedia
 
 
 def _dimensions(width, height):
@@ -249,7 +317,7 @@ def _validate_webp(data):
         _dimensions(width, height)
     kind, image = image_chunks[0]
     if kind == b'VP8 ':
-        if len(image) < 10 or image[0] & 1 or image[3:6] != b'\x9d\x01\x2a':
+        if len(image) <= 10 or image[0] & 1 or image[3:6] != b'\x9d\x01\x2a':
             raise InvalidMedia
         width, height = struct.unpack_from('<HH', image, 6)
         _dimensions(width & 0x3FFF, height & 0x3FFF)
@@ -321,14 +389,28 @@ def _validate_mp4(data):
         stbl = [(start, end) for child, start, end in minf_children if child == b'stbl']
         if len(stbl) != 1:
             continue
-        table_types = {child for child, _, _ in _mp4_boxes(data, *stbl[0], depth=5)}
-        if {b'stsd', b'stts', b'stsc', b'stsz'}.issubset(table_types) and (
-            b'stco' in table_types or b'co64' in table_types
-        ):
+        tables = _mp4_boxes(data, *stbl[0], depth=5)
+        table_contents = {child: (start, end) for child, start, end in tables}
+        required_tables = {b'stsd', b'stts', b'stsc', b'stsz'}
+        if (required_tables.issubset(table_contents)
+                and (b'stco' in table_contents or b'co64' in table_contents)
+                and _mp4_table_has_entries(data, table_contents[b'stsd'], 4)
+                and _mp4_table_has_entries(data, table_contents[b'stsz'], 8)
+                and _mp4_table_has_entries(data, table_contents[b'stts'], 4)
+                and _mp4_table_has_entries(data, table_contents[b'stsc'], 4)
+                and _mp4_table_has_entries(
+                    data, table_contents.get(b'stco', table_contents.get(b'co64')), 4,
+                )):
             has_video_track = True
             break
     if not has_video_track:
         raise InvalidMedia
+
+
+def _mp4_table_has_entries(data, bounds, count_offset):
+    start, end = bounds
+    count_position = start + count_offset
+    return count_position + 4 <= end and struct.unpack_from('>I', data, count_position)[0] > 0
 
 
 def _ebml_vint(data, offset, identifier=False):

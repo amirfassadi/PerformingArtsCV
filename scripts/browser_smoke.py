@@ -153,14 +153,14 @@ def main():
                     page.on('pageerror', lambda error: errors.append(str(error)))
                     page.on('response', lambda response: errors.append(f'HTTP {response.status}: {response.url}') if response.status >= 500 else None)
                     page.goto(base)
-                    video_base64 = page.evaluate("""async () => {
+                    def record_video(mime_type):
+                        encoded_video = page.evaluate("""async mimeType => {
                         const canvas = document.createElement('canvas');
                         canvas.width = 160;
                         canvas.height = 90;
                         const context = canvas.getContext('2d');
-                        const mimeType = 'video/mp4;codecs=avc1.42E01E';
                         if (!MediaRecorder.isTypeSupported(mimeType)) {
-                            throw new Error('Edge does not support H.264 MP4 recording.');
+                            throw new Error(`Browser does not support ${mimeType} recording.`);
                         }
                         const draw = frame => {
                             context.fillStyle = `hsl(${frame * 25 % 360} 80% 45%)`;
@@ -196,8 +196,11 @@ def main():
                             binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
                         }
                         return btoa(binary);
-                    }""")
-                    video_payload = base64.b64decode(video_base64)
+                    }""", mime_type)
+                        return base64.b64decode(encoded_video)
+
+                    video_payload = record_video('video/mp4;codecs=avc1.42E01E')
+                    webm_payload = record_video('video/webm;codecs=vp8')
                     if screenshots:
                         page.screenshot(path=str(screenshots / 'home-desktop.png'), full_page=True)
 
@@ -404,6 +407,18 @@ def main():
                             or playback['height'] != 90 or playback['currentTime'] < 0.2
                             or playback['readyState'] < 2):
                         raise AssertionError(f'Video did not play a decoded frame: {playback!r}')
+                    page.goto(base + '/dashboard/upload/')
+                    page.locator('#id_title').fill('ویدئوی WebM آزمایشی')
+                    page.locator('#id_file').set_input_files({
+                        'name': 'sample.webm',
+                        'mimeType': 'video/webm',
+                        'buffer': webm_payload,
+                    })
+                    page.get_by_role('button', name='ذخیره', exact=True).click()
+                    webm_card = page.locator('.media-card').filter(has_text='ویدئوی WebM آزمایشی')
+                    expect(webm_card).to_be_visible()
+                    webm_card.get_by_role('button', name='حذف فایل').click()
+                    expect(page.locator('.media-card').filter(has_text='ویدئوی WebM آزمایشی')).to_have_count(0)
 
                     page.goto(base + '/dashboard/links/add/')
                     page.locator('#id_title').fill('لینک نمونه‌کار ساختگی')
