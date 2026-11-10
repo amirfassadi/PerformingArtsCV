@@ -1,8 +1,11 @@
 import base64
+import binascii
 import io
 import json
 import sqlite3
+import struct
 import tempfile
+import zlib
 from contextlib import closing
 from datetime import timedelta
 from pathlib import Path
@@ -24,7 +27,22 @@ from .gateway import GatewayError, Zarinpal
 from .models import MB, Entitlement, Favorite, Invitation, InvitationLink, Payment, Plan, PortfolioFile, Profile, SiteSettings, WorkLink
 from .services import add_file
 
-PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
+PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==')
+
+
+def png_chunk(kind, payload):
+    chunk = kind + payload
+    return struct.pack('>I', len(payload)) + chunk + struct.pack('>I', binascii.crc32(chunk) & 0xFFFFFFFF)
+
+
+def padded_png(size):
+    return (
+        b'\x89PNG\r\n\x1a\n'
+        + png_chunk(b'IHDR', struct.pack('>IIBBBBB', 1, 1, 8, 6, 0, 0, 0))
+        + png_chunk(b'tEXt', b'Comment\0' + b'x' * size)
+        + png_chunk(b'IDAT', zlib.compress(b'\0\xff\0\0\xff'))
+        + png_chunk(b'IEND', b'')
+    )
 
 class ProductTests(TestCase):
     @classmethod
@@ -52,10 +70,10 @@ class ProductTests(TestCase):
         values.update(kwargs)
         return Entitlement.objects.create(**values)
 
-    def upload(self, user=None, payload=PNG):
+    def upload(self, user=None, payload=PNG, filename='work.png'):
         self.client.force_login(user or self.owner)
         return self.client.post(reverse('upload'), {
-            'title': 'تصویر تست', 'file': SimpleUploadedFile('work.png', payload, 'image/png'),
+            'title': 'تصویر تست', 'file': SimpleUploadedFile(filename, payload, 'application/octet-stream'),
         })
 
     def test_invited_signup_creates_one_profile_and_one_immutable_relation_without_rewards(self):
@@ -427,27 +445,17 @@ class ProductTests(TestCase):
         self.assertEqual(dashboard.context['quota_mb'], 100)
         self.assertEqual(dashboard.context['used_mb'], len(PNG) / MB)
 
-    def test_allowed_file_signatures_and_rejected_extension_mismatch(self):
-        samples = [
-            ('sample.jpg', b'\xff\xd8\xffsynthetic', 'image/jpeg'),
-            ('sample.jpeg', b'\xff\xd8\xffsynthetic', 'image/jpeg'),
-            ('sample.png', PNG, 'image/png'),
-            ('sample.webp', b'RIFF\x00\x00\x00\x00WEBPsynthetic', 'image/webp'),
-            ('sample.mp4', b'\x00\x00\x00\x18ftypisomsynthetic', 'video/mp4'),
-            ('sample.webm', b'\x1aE\xdf\xa3synthetic', 'video/webm'),
-        ]
-        for filename, payload, content_type in samples:
-            with self.subTest(filename=filename):
-                form = UploadForm(
-                    {'title': 'synthetic'},
-                    {'file': SimpleUploadedFile(filename, payload, 'application/octet-stream')},
-                )
-                self.assertTrue(form.is_valid(), form.errors)
-                self.assertEqual(form.cleaned_data['file'].detected_content_type, content_type)
+    def test_complete_png_is_accepted_and_extension_mismatch_is_rejected(self):
+        form = UploadForm(
+            {'title': 'synthetic'},
+            {'file': SimpleUploadedFile('sample.png', PNG, 'application/octet-stream')},
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['file'].detected_content_type, 'image/png')
 
         invalid = UploadForm(
             {'title': 'synthetic'},
-            {'file': SimpleUploadedFile('sample.png', b'\xff\xd8\xffsynthetic', 'image/png')},
+            {'file': SimpleUploadedFile('sample.jpg', PNG, 'image/jpeg')},
         )
         self.assertFalse(invalid.is_valid())
         self.assertIn('file', invalid.errors)
@@ -456,24 +464,27 @@ class ProductTests(TestCase):
         WorkLink.objects.create(profile=self.artist, title='نمونه ساختگی', url='https://example.test/work')
         self.assertEqual(storage_used(self.artist), 0)
 
-    def test_video_upload_is_rendered_and_served_as_private_video(self):
-        uploaded = SimpleUploadedFile(
-            'sample.mp4',
-            b'\x00\x00\x00\x18ftypisomsynthetic-video',
-            'application/octet-stream',
+    def test_rejects_truncated_and_malformed_media_without_saving(self):
+        malformed_png = bytearray(PNG)
+        malformed_png[29] ^= 0x01
+        invalid_files = (
+            ('work.png', PNG[:8]),
+            ('work.png', PNG[:-5]),
+            ('work.png', PNG + b'extra bytes after IEND'),
+            ('work.png', bytes(malformed_png)),
+            ('work.png', b'\x89PNG\r\n\x1a\n' + b'\x00' * 24),
+            ('work.jpg', b'\xff\xd8\xff'),
+            ('work.webp', b'RIFF\x00\x00\x00\x00WEBP'),
+            ('work.mp4', b'\x00\x00\x00\x18ftyp'),
+            ('work.webm', b'\x1aE\xdf\xa3\x9f'),
         )
-        form = UploadForm({'title': 'ویدئوی ساختگی'}, {'file': uploaded})
-        self.assertTrue(form.is_valid(), form.errors)
-        item = add_file(self.artist, form.cleaned_data['file'], 'ویدئوی ساختگی')
-        self.client.force_login(self.owner)
-        response = self.client.get(reverse('profile', args=[self.artist.pk]))
-        self.assertContains(response, '<video controls preload="metadata"', html=False)
-        self.assertContains(response, 'ویدئوی ساختگی')
-        media_response = self.client.get(reverse('media', args=[item.pk]))
-        self.assertEqual(media_response.status_code, 200)
-        self.assertEqual(media_response['Content-Type'], 'video/mp4')
-        self.assertEqual(b''.join(media_response.streaming_content), b'\x00\x00\x00\x18ftypisomsynthetic-video')
-        media_response.close()
+        for filename, payload in invalid_files:
+            with self.subTest(filename=filename, payload_length=len(payload)):
+                response = self.upload(payload=payload, filename=filename)
+                self.assertContains(response, 'فایل معتبر')
+                self.assertFalse(PortfolioFile.objects.exists())
+                self.assertEqual(storage_used(self.artist), 0)
+                self.assertEqual(list(Path(self.media.name).rglob('*.*')), [])
 
     def test_external_work_link_can_be_added_and_removed_without_storage_use(self):
         self.client.force_login(self.owner)
@@ -542,8 +553,9 @@ class ProductTests(TestCase):
 
     def test_reject_next_upload_when_combined_size_exceeds_quota(self):
         SiteSettings.objects.filter(pk=1).update(free_storage_mb=1)
-        self.assertEqual(self.upload(payload=PNG + b'0' * 600000).status_code, 302)
-        self.assertContains(self.upload(payload=PNG + b'0' * 600000), 'فضای کافی ندارید')
+        payload = padded_png(600_000)
+        self.assertEqual(self.upload(payload=payload).status_code, 302)
+        self.assertContains(self.upload(payload=payload), 'فضای کافی ندارید')
         self.assertEqual(PortfolioFile.objects.count(), 1)
 
     @override_settings(MAX_UPLOAD_BYTES=32)

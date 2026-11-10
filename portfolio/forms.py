@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from .models import Profile, WorkLink
+from .media_validation import InvalidMedia, validate_media
 
 class SignupForm(UserCreationForm):
     email = forms.EmailField(label='ایمیل')
@@ -37,19 +38,12 @@ class UploadForm(forms.Form):
 
     def clean_file(self):
         value = self.cleaned_data['file']
-        signature = value.read(32)
-        value.seek(0)
         suffix = Path(value.name).suffix.lower()
-        checks = {
-            '.jpg': ('image/jpeg', signature.startswith(b'\xff\xd8\xff')),
-            '.jpeg': ('image/jpeg', signature.startswith(b'\xff\xd8\xff')),
-            '.png': ('image/png', signature.startswith(b'\x89PNG\r\n\x1a\n')),
-            '.webp': ('image/webp', signature[:4] == b'RIFF' and signature[8:12] == b'WEBP'),
-            '.mp4': ('video/mp4', signature[4:8] == b'ftyp'),
-            '.webm': ('video/webm', signature.startswith(b'\x1aE\xdf\xa3')),
-        }
-        content_type, valid = checks.get(suffix, ('', False))
-        if not valid:
+        try:
+            content_type = validate_media(value.read(), suffix)
+        except InvalidMedia:
             raise ValidationError('فایل معتبر JPG، PNG، WebP، MP4 یا WebM انتخاب کنید.')
+        finally:
+            value.seek(0)
         value.detected_content_type = content_type
         return value
