@@ -254,3 +254,26 @@ class Payment(models.Model):
 
     def __str__(self):
         return f'{self.user} / {self.plan_name} / {self.get_status_display()}'
+
+class RequestThrottle(models.Model):
+    key = models.CharField(max_length=180, unique=True)
+    window_started = models.DateTimeField()
+    attempts = models.PositiveIntegerField(default=0)
+
+class SupportRequest(models.Model):
+    class Kind(models.TextChoices):
+        SUPPORT = 'support', 'پشتیبانی'
+        CONTENT = 'content', 'گزارش محتوا'
+        ACCOUNT = 'account', 'درخواست حذف حساب'
+
+    class Status(models.TextChoices):
+        OPEN = 'open', 'باز'
+        REVIEWING = 'reviewing', 'در حال بررسی'
+        CLOSED = 'closed', 'بسته'
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='support_requests')
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    subject = models.CharField(max_length=160)
+    message = models.TextField(max_length=5000)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)

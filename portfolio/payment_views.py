@@ -9,6 +9,7 @@ from django.views.decorators.http import require_GET, require_POST
 from .billing import start_payment, verify_payment
 from .gateway import GatewayError
 from .models import Payment, Plan
+from .security import rate_limit
 
 @never_cache
 @login_required
@@ -16,6 +17,11 @@ def checkout(request, pk):
     plan = get_object_or_404(Plan, pk=pk, active=True, price_rial__gt=0)
     terms = [plan.pk, plan.name, plan.price_rial, plan.kind, plan.storage_mb, plan.duration_days]
     if request.method == 'POST':
+        allowed, retry_after = rate_limit(request, 'checkout')
+        if not allowed:
+            response = HttpResponse('تعداد درخواست‌های پرداخت بیش از حد مجاز است؛ بعداً دوباره تلاش کنید.', status=429)
+            response['Retry-After'] = retry_after
+            return response
         try:
             quote = signing.loads(request.POST.get('quote', ''), salt='checkout', max_age=900)
         except signing.BadSignature:
