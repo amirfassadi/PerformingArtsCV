@@ -17,7 +17,7 @@ from urllib.request import ProxyHandler, build_opener
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=')
+PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==')
 
 def run_manage(environment, *args):
     result = subprocess.run([sys.executable, 'manage.py', *args], cwd=ROOT, env=environment,
@@ -153,6 +153,54 @@ def main():
                     page.on('pageerror', lambda error: errors.append(str(error)))
                     page.on('response', lambda response: errors.append(f'HTTP {response.status}: {response.url}') if response.status >= 500 else None)
                     page.goto(base)
+                    def record_video(mime_type):
+                        encoded_video = page.evaluate("""async mimeType => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 160;
+                        canvas.height = 90;
+                        const context = canvas.getContext('2d');
+                        if (!MediaRecorder.isTypeSupported(mimeType)) {
+                            throw new Error(`Browser does not support ${mimeType} recording.`);
+                        }
+                        const draw = frame => {
+                            context.fillStyle = `hsl(${frame * 25 % 360} 80% 45%)`;
+                            context.fillRect(0, 0, canvas.width, canvas.height);
+                            context.fillStyle = 'white';
+                            context.font = '20px sans-serif';
+                            context.fillText('Synthetic video ' + frame, 12, 48);
+                        };
+                        draw(0);
+                        const stream = canvas.captureStream(12);
+                        const recorder = new MediaRecorder(stream, {mimeType});
+                        const chunks = [];
+                        recorder.ondataavailable = event => {
+                            if (event.data.size) chunks.push(event.data);
+                        };
+                        const stopped = new Promise((resolve, reject) => {
+                            recorder.onstop = resolve;
+                            recorder.onerror = event => reject(event.error);
+                        });
+                        recorder.start();
+                        let frame = 0;
+                        const timer = setInterval(() => draw(++frame), 100);
+                        await new Promise(resolve => setTimeout(resolve, 1800));
+                        recorder.stop();
+                        await stopped;
+                        stream.getTracks().forEach(track => track.stop());
+                        clearInterval(timer);
+                        const blob = new Blob(chunks, {type: recorder.mimeType});
+                        if (blob.size < 100) throw new Error(`Recorded video is unexpectedly small: ${blob.size}`);
+                        const bytes = new Uint8Array(await blob.arrayBuffer());
+                        let binary = '';
+                        for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+                            binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+                        }
+                        return btoa(binary);
+                    }""", mime_type)
+                        return base64.b64decode(encoded_video)
+
+                    video_payload = record_video('video/mp4;codecs=avc1.42E01E')
+                    webm_payload = record_video('video/webm;codecs=vp8')
                     if screenshots:
                         page.screenshot(path=str(screenshots / 'home-desktop.png'), full_page=True)
 
@@ -239,6 +287,46 @@ def main():
                         raise AssertionError('Private account email appeared on the profile.')
                     expect(page.locator('body')).to_contain_text('public-studio@example.test')
 
+                    def verify_canvas_image(title, suffix, mime_type):
+                        encoded_image = page.evaluate("""async ({mimeType, label}) => {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 160;
+                            canvas.height = 90;
+                            const context = canvas.getContext('2d');
+                            context.fillStyle = '#336699';
+                            context.fillRect(0, 0, canvas.width, canvas.height);
+                            context.fillStyle = 'white';
+                            context.fillText(label, 8, 45);
+                            const blob = await new Promise(resolve => canvas.toBlob(resolve, mimeType));
+                            if (!blob) throw new Error(`${mimeType} encoding is unavailable.`);
+                            const bytes = new Uint8Array(await blob.arrayBuffer());
+                            let binary = '';
+                            for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+                                binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+                            }
+                            return btoa(binary);
+                        }""", {'mimeType': mime_type, 'label': title})
+                        page.goto(base + '/dashboard/upload/')
+                        page.locator('#id_title').fill(title)
+                        page.locator('#id_file').set_input_files({
+                            'name': f'sample.{suffix}',
+                            'mimeType': mime_type,
+                            'buffer': base64.b64decode(encoded_image),
+                        })
+                        page.get_by_role('button', name='ذخیره', exact=True).click()
+                        card = page.locator('.media-card').filter(has_text=title)
+                        expect(card).to_be_visible()
+                        image = card.locator('img')
+                        if not image.evaluate(
+                            '(image) => image.complete && image.naturalWidth === 160 && image.naturalHeight === 90',
+                        ):
+                            raise AssertionError(f'Uploaded {mime_type} image did not decode in the browser.')
+                        card.get_by_role('button', name='حذف فایل').click()
+                        expect(page.locator('.media-card').filter(has_text=title)).to_have_count(0)
+
+                    verify_canvas_image('تصویر JPEG آزمایشی', 'jpg', 'image/jpeg')
+                    verify_canvas_image('تصویر WebP آزمایشی', 'webp', 'image/webp')
+
                     page.goto(base + '/dashboard/upload/')
                     page.locator('#id_title').fill('نمونه‌کار آزمایشی')
                     page.locator('#id_file').set_input_files({'name': 'sample.png', 'mimeType': 'image/png', 'buffer': PNG})
@@ -249,6 +337,99 @@ def main():
                     if not image.evaluate('(image) => image.complete && image.naturalWidth > 0'):
                         raise AssertionError('Uploaded image did not decode in the browser')
                     file_path = image.get_attribute('src')
+                    profile_path = page.get_by_role('link', name='پیش‌نمایش رزومه').get_attribute('href')
+                    expect(page.locator('.storage-panel')).to_contain_text('100 مگابایت')
+                    page.goto(base + '/dashboard/upload/')
+                    page.locator('#id_title').fill('ویدئوی آزمایشی')
+                    page.locator('#id_file').set_input_files({
+                        'name': 'sample.mp4',
+                        'mimeType': 'video/mp4',
+                        'buffer': video_payload,
+                    })
+                    page.get_by_role('button', name='ذخیره', exact=True).click()
+                    expect(page.get_by_role('heading', name='ویدئوی آزمایشی')).to_be_visible()
+                    video = page.locator('.media-card video')
+                    expect(video).to_be_visible()
+                    video_path = video.get_attribute('src')
+                    video_response = page.request.get(base + video_path)
+                    if video_response.status != 200 or video_response.headers.get('content-type') != 'video/mp4':
+                        raise AssertionError('Uploaded video was not delivered by the private media endpoint.')
+                    playback = video.evaluate("""async video => {
+                        video.muted = true;
+                        await new Promise((resolve, reject) => {
+                            const timeout = setTimeout(() => reject(new Error('Video metadata timed out.')), 5000);
+                            video.addEventListener('loadedmetadata', () => {
+                                clearTimeout(timeout);
+                                resolve();
+                            }, {once: true});
+                            video.addEventListener('error', () => reject(new Error('Video metadata could not be decoded.')), {once: true});
+                            video.load();
+                        });
+                        await video.play();
+                        await new Promise((resolve, reject) => {
+                            const timeout = setTimeout(() => reject(new Error('Video frame timed out.')), 5000);
+                            if (video.requestVideoFrameCallback) {
+                                video.requestVideoFrameCallback(() => {
+                                    clearTimeout(timeout);
+                                    resolve();
+                                });
+                            } else {
+                                video.addEventListener('timeupdate', () => {
+                                    clearTimeout(timeout);
+                                    resolve();
+                                }, {once: true});
+                            }
+                        });
+                        await new Promise((resolve, reject) => {
+                            const deadline = Date.now() + 2000;
+                            const checkProgress = () => {
+                                if (video.currentTime >= 0.2) {
+                                    resolve();
+                                } else if (Date.now() >= deadline) {
+                                    reject(new Error('Video playback did not advance.'));
+                                } else {
+                                    setTimeout(checkProgress, 25);
+                                }
+                            };
+                            checkProgress();
+                        });
+                        const result = {
+                            duration: video.duration,
+                            width: video.videoWidth,
+                            height: video.videoHeight,
+                            currentTime: video.currentTime,
+                            readyState: video.readyState,
+                        };
+                        video.pause();
+                        return result;
+                    }""")
+                    if (playback['duration'] <= 0 or playback['width'] != 160
+                            or playback['height'] != 90 or playback['currentTime'] < 0.2
+                            or playback['readyState'] < 2):
+                        raise AssertionError(f'Video did not play a decoded frame: {playback!r}')
+                    page.goto(base + '/dashboard/upload/')
+                    page.locator('#id_title').fill('ویدئوی WebM آزمایشی')
+                    page.locator('#id_file').set_input_files({
+                        'name': 'sample.webm',
+                        'mimeType': 'video/webm',
+                        'buffer': webm_payload,
+                    })
+                    page.get_by_role('button', name='ذخیره', exact=True).click()
+                    webm_card = page.locator('.media-card').filter(has_text='ویدئوی WebM آزمایشی')
+                    expect(webm_card).to_be_visible()
+                    webm_card.get_by_role('button', name='حذف فایل').click()
+                    expect(page.locator('.media-card').filter(has_text='ویدئوی WebM آزمایشی')).to_have_count(0)
+
+                    page.goto(base + '/dashboard/links/add/')
+                    page.locator('#id_title').fill('لینک نمونه‌کار ساختگی')
+                    page.locator('#id_url').fill('https://example.test/synthetic-work')
+                    page.get_by_role('button', name='ذخیره', exact=True).click()
+                    page.goto(base + '/dashboard/')
+                    external_link = page.locator('.link-row').filter(has_text='لینک نمونه‌کار ساختگی')
+                    if external_link.locator('a').get_attribute('href') != 'https://example.test/synthetic-work':
+                        raise AssertionError('The external work link did not preserve its validated URL.')
+                    external_link.get_by_role('button', name='حذف').click()
+                    expect(page.locator('body')).not_to_contain_text('لینک نمونه‌کار ساختگی')
                     profile_path = page.get_by_role('link', name='پیش‌نمایش رزومه').get_attribute('href')
                     if screenshots:
                         page.screenshot(path=str(screenshots / 'dashboard-desktop.png'), full_page=True)
@@ -291,6 +472,9 @@ def main():
                     expect(page.get_by_role('heading', name='بازیگر آزمایشی', exact=True)).to_be_visible()
                     assert page.request.get(base + profile_path).status == 200
                     assert page.request.get(base + file_path).status == 200
+                    video_response = page.request.get(base + video_path)
+                    if video_response.status != 200 or video_response.headers.get('content-type') != 'video/mp4':
+                        raise AssertionError('Viewer could not access the published video with an active grant.')
                     page.get_by_role('button', name='+ افزودن به منتخب‌ها').click()
                     expect(page.get_by_role('button', name='حذف از منتخب‌ها')).to_be_visible()
                     page.get_by_role('button', name='حذف از منتخب‌ها').click()
@@ -314,6 +498,7 @@ def main():
                     page.locator('#id_published').uncheck()
                     page.get_by_role('button', name='ذخیره', exact=True).click()
                     expect(page.locator('body')).to_contain_text('پیش‌نویس')
+                    assert page.request.get(base + file_path).status == 200
                     logout()
                     login('qa_viewer', viewer_password)
                     assert page.request.get(base + profile_path).status == 403
@@ -330,8 +515,22 @@ def main():
                     run_manage(environment, 'shell', '-c',
                         "from portfolio.models import Favorite,PortfolioFile; "
                         "assert Favorite.objects.filter(user__username='qa_viewer').exists(); "
+                        "assert PortfolioFile.objects.count()==2; "
+                        "assert all(f.file.storage.exists(f.file.name) for f in PortfolioFile.objects.all())")
+                    logout()
+                    login('qa_artist', artist_password)
+                    page.goto(base + '/dashboard/')
+                    page.locator('.media-card').filter(has_text='ویدئوی آزمایشی').get_by_role(
+                        'button', name='حذف فایل',
+                    ).click()
+                    run_manage(environment, 'shell', '-c',
+                        "from portfolio.models import PortfolioFile; "
+                        "from django.conf import settings; "
                         "assert PortfolioFile.objects.count()==1; "
-                        "f=PortfolioFile.objects.get(); assert f.file.storage.exists(f.file.name)")
+                        "assert all(f.file.storage.exists(f.file.name) for f in PortfolioFile.objects.all()); "
+                        "assert len([path for path in settings.MEDIA_ROOT.rglob('*') if path.is_file()])==1")
+                    assert page.request.get(base + file_path).status == 200
+                    assert page.request.get(base + video_path).status == 404
                     if errors:
                         raise AssertionError('\n'.join(errors))
                 except BaseException as error:
@@ -360,7 +559,7 @@ def main():
                 "assert Profile.objects.count()==3; assert Invitation.objects.count()==2; "
                 "assert InvitationLink.objects.count()==3; f=PortfolioFile.objects.get(); "
                 "assert f.file.open('rb').read(8)==b'\\x89PNG\\r\\n\\x1a\\n'")
-            print(f'PASS: invited browser signup, invitation copy ({copy_result}), dashboard/privacy/deactivation, profile edit, private upload, paywall, paid browsing, favorites, mobile, backup and restored data.')
+            print(f'PASS: invited browser signup, invitation copy ({copy_result}), dashboard/privacy/deactivation, profile edit, private image and browser-recorded H.264 MP4 playback ({playback}), external-link lifecycle, paywall, paid browsing, favorites, mobile, backup and restored data.')
         finally:
             primary_error = sys.exc_info()[1]
             steps = []
