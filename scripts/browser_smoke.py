@@ -329,6 +329,7 @@ def main():
                         card = page.locator('.media-card').filter(has_text=title)
                         expect(card).to_be_visible()
                         image = card.locator('img')
+                        image.evaluate('(image) => image.decode()')
                         if not image.evaluate(
                             '(image) => image.complete && image.naturalWidth === 160 && image.naturalHeight === 90',
                         ):
@@ -346,6 +347,7 @@ def main():
                     expect(page.get_by_role('heading', name='نمونه‌کار آزمایشی')).to_be_visible()
                     image = page.locator('.media-card img')
                     expect(image).to_be_visible()
+                    image.evaluate('(image) => image.decode()')
                     if not image.evaluate('(image) => image.complete && image.naturalWidth > 0'):
                         raise AssertionError('Uploaded image did not decode in the browser')
                     file_path = image.get_attribute('src')
