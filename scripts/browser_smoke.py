@@ -153,6 +153,18 @@ def main():
                     page.on('pageerror', lambda error: errors.append(str(error)))
                     page.on('response', lambda response: errors.append(f'HTTP {response.status}: {response.url}') if response.status >= 500 else None)
                     page.goto(base)
+                    # Check rendered styling so HTTP 200 alone cannot approve the wrong theme.
+                    for width in (1440, 390, 360):
+                        page.set_viewport_size({'width': width, 'height': 1050})
+                        expect(page.locator('body')).to_have_css('background-color', 'rgb(12, 13, 14)')
+                        expect(page.locator('.hero-cta-group .btn-primary')).to_have_css(
+                            'background-color', 'rgb(185, 28, 28)',
+                        )
+                        assert '?v=' in page.locator('link[rel="stylesheet"]').last.get_attribute('href')
+                        assert page.evaluate('document.documentElement.scrollWidth') <= width
+                        if screenshots:
+                            page.screenshot(path=str(screenshots / f'home-{width}.png'), full_page=True)
+                    page.set_viewport_size({'width': 1440, 'height': 1050})
                     def record_video(mime_type):
                         encoded_video = page.evaluate("""async mimeType => {
                         const canvas = document.createElement('canvas');

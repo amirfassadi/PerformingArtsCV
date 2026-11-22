@@ -1,0 +1,11 @@
+[Unit]
+Description=Deploy the CI-verified DGM website revision
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=GIT_TERMINAL_PROMPT=0
+ExecStart=/usr/local/sbin/dgm-deploy
+TimeoutStartSec=300
+UMask=0077
