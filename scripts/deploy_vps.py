@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from urllib.parse import urlsplit
 
 PROJECT = Path('/home/amir/performingartscv')
 STATIC = Path('/var/www/dgm-static')
@@ -83,21 +84,32 @@ def stage_static(sha):
         raise
 
 
-def healthy(sha):
+def health_origin(env):
+    parsed = urlsplit(env.get('PUBLIC_BASE_URL', 'https://dgm.co.ir'))
+    if (parsed.scheme != 'https' or parsed.hostname not in {'dgm.co.ir', 'artistprofile.ir'}
+            or parsed.username is not None or parsed.password is not None
+            or parsed.port is not None or parsed.path not in ('', '/')
+            or parsed.query or parsed.fragment):
+        raise RuntimeError('PUBLIC_BASE_URL must be an approved HTTPS site origin')
+    return f'https://{parsed.hostname}'
+
+
+def healthy(sha, origin):
+    domain = urlsplit(origin).hostname
     base = ['/usr/bin/curl', '--fail', '--silent', '--show-error',
             '--max-time', '15', '--retry', '5', '--retry-connrefused',
-            '--retry-delay', '1', '--resolve', 'dgm.co.ir:443:127.0.0.1']
-    html = run(*base, 'https://dgm.co.ir/')
+            '--retry-delay', '1', '--resolve', f'{domain}:443:127.0.0.1']
+    html = run(*base, f'{origin}/')
     expected = (PROJECT / 'static/app.css').read_bytes()
     # Compare actual downloaded bytes; text-mode conversion must not hide a mismatch.
-    response = subprocess.run([*base, f'https://dgm.co.ir/static/app.css?v={sha}'],
+    response = subprocess.run([*base, f'{origin}/static/app.css?v={sha}'],
                               check=True, capture_output=True, timeout=120).stdout
     if response != expected:
         raise RuntimeError('Nginx is serving CSS from a different release')
     digest = hashlib.sha256(expected).hexdigest()[:16]
     if f'app.css?v={digest}' not in html:
         raise RuntimeError('Homepage is not using this release asset fingerprint')
-    release = json.loads(run(*base, f'https://dgm.co.ir/static/release.json?v={sha}'))
+    release = json.loads(run(*base, f'{origin}/static/release.json?v={sha}'))
     if release.get('commit') != sha:
         raise RuntimeError('Public release identity does not match the tested commit')
 
@@ -131,6 +143,7 @@ def deploy(check_only=False):
         return
 
     env = environment()
+    origin = health_origin(env)
     print(run('/bin/systemctl', 'start', 'dgm-backup.service'))
     git('update-ref', 'refs/dgm/previous', previous)
     previous_static = Path(tempfile.mkdtemp(prefix='.dgm-static-previous-', dir=STATIC.parent))
@@ -155,7 +168,7 @@ def deploy(check_only=False):
             raise
         swapped = True
         run('/bin/systemctl', 'start', 'dgm-portfolio.service')
-        healthy(target)
+        healthy(target, origin)
     except BaseException:
         if stopped:
             run('/bin/systemctl', 'stop', 'dgm-portfolio.service')

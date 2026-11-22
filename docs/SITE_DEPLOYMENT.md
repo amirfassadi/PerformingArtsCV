@@ -1,5 +1,24 @@
 # DGM production deployment
 
+## Pending primary domain migration: artistprofile.ir
+
+The requested new primary domain is `artistprofile.ir`; the currently verified
+live domain is `dgm.co.ir`. Do not redirect the old domain until public DNS,
+HTTPS, Django host settings, and the new primary's actual rendered site work.
+
+The root-installed deploy controller must be manually updated from the reviewed
+`scripts/deploy_vps.py` before changing the primary domain. It now reads the
+health-check origin from the root-owned environment's `PUBLIC_BASE_URL`, with an
+allowlist for these two domains. A repository update alone does not update the
+installed controller. Otherwise the old hard-coded health check would fail after
+the old domain becomes a redirect.
+
+On the VPS, keep old and new hostnames in `DJANGO_ALLOWED_HOSTS` during migration;
+set `PUBLIC_BASE_URL=https://artistprofile.ir` only once HTTPS is ready. Preserve
+existing database, media, users, backups and the app's signing secret. Both nginx
+HTTP virtual hosts must retain their ACME webroot for certificate renewal.
+Domain DNS/HTTPS changes remain operator actions, outside automatic CD.
+
 The only production source branch is `codex/restore-artistic-design`.
 Local development for this project uses `E:\miranco.project\Performing Arts-CV`.
 Do not deploy an issue/backend branch or the historical Studio ZIP/patch.
