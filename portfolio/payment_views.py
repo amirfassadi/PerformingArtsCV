@@ -41,11 +41,25 @@ def callback(request, pk):
     payment = get_object_or_404(Payment, pk=pk)
     if not payment.authority or request.GET.get('Authority') != payment.authority:
         return HttpResponse('شناسه پرداخت معتبر نیست.', status=400)
-    if request.GET.get('Status') == 'OK':
+    callback_status = request.GET.get('Status')
+    if callback_status == 'OK':
         try:
             verify_payment(payment)
         except GatewayError:
-            pass  # The owner can retry verification from the payment page.
+            Payment.objects.filter(
+                pk=payment.pk,
+                status__in=(Payment.Status.PENDING, Payment.Status.UNKNOWN, Payment.Status.CANCELED),
+            ).update(status=Payment.Status.UNKNOWN)
+    elif callback_status == 'NOK':
+        Payment.objects.filter(
+            pk=payment.pk,
+            status__in=(Payment.Status.PENDING, Payment.Status.UNKNOWN),
+        ).update(status=Payment.Status.UNKNOWN)
+    else:
+        Payment.objects.filter(
+            pk=payment.pk,
+            status__in=(Payment.Status.PENDING, Payment.Status.UNKNOWN, Payment.Status.CANCELED),
+        ).update(status=Payment.Status.UNKNOWN)
     return redirect('payment-detail', pk=pk)
 
 @never_cache
